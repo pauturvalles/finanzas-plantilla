@@ -1,0 +1,27 @@
+# Tema: oscuro por defecto. Se puede cambiar en el menú ⋮ (arriba a la derecha) → Settings → Theme.
+[theme]
+base = "dark"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+baseRadius = "0.6rem"
+metricValueFontWeight = 600
+showWidgetBorder = true
+chartCategoricalColors = ["#6C8EBF", "#D4A85A", "#7FAE8E", "#C27C88", "#9C8FC4", "#6FAAB5", "#B8A27A", "#8C95A3"]
+
+[theme.dark]
+primaryColor = "#7FA3D9"
+backgroundColor = "#14171C"
+secondaryBackgroundColor = "#1C2027"
+textColor = "#E3E6EA"
+borderColor = "#2C313A"
+
+[theme.light]
+primaryColor = "#3D6BB3"
+backgroundColor = "#F7F8FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1F2937"
+borderColor = "#E5E7EB"
+
+[runner]
+# Sin «magic»: Streamlit no pinta solo las expresiones sueltas (causaba gráficos repetidos).
+magicEnabled = false

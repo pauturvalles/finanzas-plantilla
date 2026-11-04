@@ -1,0 +1,63 @@
+# Costes y remuneraciones que usa la pestaña «Costes y efectivo» del dashboard.
+# Son datos públicos que CAMBIAN: revísalos de vez en cuando en la web o la app de cada entidad
+# (en Indexa, el apartado de costes de tu cuenta; en los fondos, su documento KID) y actualiza la fecha.
+revisado: "2026-11-01"   # revisa los datos y cambia la fecha
+
+# Costes anuales en % sobre el valor. gestion + custodia los cobra la plataforma; ter, el fondo.
+categorias:
+  Fondos Indexa:            {gestion: 0.38, custodia: 0.11, ter: 0.08, fuente: "Tramo 10.000–100.000 €; coste total medio de Indexa ≈ 0,53 % en 2026"}
+  Plan de pensiones Indexa: {gestion: 0.355, custodia: 0.048, ter: 0.10, fuente: "Planes de Indexa 2026: 0,403 % gestión + custodia; TER de los fondos subyacentes estimado"}
+  Fondos MyInvestor:        {gestion: 0.0, custodia: 0.0, ter: null, fuente: "Sin comisión de custodia en fondos; TER por fondo (abajo)"}
+  ETF y acciones Trade Republic: {gestion: 0.0, custodia: 0.0, ter: null, fuente: "Sin custodia; TER por ETF (abajo)"}
+
+# TER por ISIN (gastos corrientes del fondo o ETF, %). Comprobar en el KID de cada uno.
+ter_isin:
+  IE00BD0NCM55: 0.12   # iShares Developed World Index (IE) D Acc EUR
+  IE00B4L5Y983: 0.20   # iShares Core MSCI World UCITS ETF
+  IE00B4ND3602: 0.12   # iShares Physical Gold ETC
+
+# Referencia para comparar: coste total de una cartera indexada equivalente montada por tu cuenta
+# con fondos indexados baratos en un bróker sin custodia (sin el servicio de rebalanceo automático).
+referencia_bajo_coste: 0.15
+
+# Remuneración del efectivo (% TAE). Trade Republic se calcula también con los intereses reales cobrados.
+remuneracion:
+  TR: 2.0         # se recalcula con los intereses que cobres de verdad
+  REV_PERS: 0.0
+  REV_CONJ: 0.0
+  BANCO_CORR: 0.0
+mejor_alternativa: 2.27   # la mejor remuneración sin condiciones a la que tienes acceso hoy
+meses_colchon: 3          # meses de gasto normal que conviene tener a mano en la cuenta del día a día
+
+# Fiscalidad del año en curso (pestaña Fiscal). Normativa estatal 2025–2026; revisar si cambia.
+fiscal:
+  tipo_marginal: 30            # % aproximado de tu tramo general (estatal + autonómico): míralo en tu última renta
+  limite_plan_pensiones: 1500  # aportación individual máxima que reduce la base general
+  categoria_plan_pensiones: "Ahorro: plan de pensiones"   # categoría con la que clasificas tus aportaciones al plan
+  # Donativos a entidades de la Ley 49/2002: 80 % de los primeros 250 €, 40 % del resto (45 % si es recurrente ≥ 3 años a la misma entidad).
+  donativos_patron: "FUNDACI|ONG |DONATI|CRUZ ROJA|UNICEF|MEDICOS SIN|CARITAS|ACNUR"
+  donativos_recurrentes: false # true si donas a la misma entidad 3 años seguidos o más
+
+# Reparto del patrimonio y proyección (pestaña Patrimonio).
+reparto:
+  # Clase de activo de cada categoría; los ISIN de abajo mandan sobre la categoría.
+  clases:
+    Fondos Indexa: Renta variable
+    Fondos MyInvestor: Renta variable
+    Plan de pensiones Indexa: Renta variable
+    ETF y acciones Trade Republic: Renta variable
+    Cripto: Cripto
+    Efectivo en cuentas: Efectivo
+  isin:
+    IE00B4ND3602: Oro            # iShares Physical Gold
+  # Objetivo de partida (%). Se edita desde el dashboard (Patrimonio → «Editar tu objetivo de reparto»).
+  objetivo:
+    Renta variable: 70
+    Efectivo: 30
+  # Rentabilidad anual esperada por clase (%), para la proyección. Supuestos, no previsiones.
+  rentabilidad:
+    Renta variable: 6.0
+    Efectivo: 2.0
+    Cripto: 0.0
+    Oro: 3.0
+  inflacion: 2.5

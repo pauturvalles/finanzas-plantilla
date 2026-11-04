@@ -1,0 +1,18 @@
+.env
+*.pem
+__pycache__/
+.venv/
+.pytest_cache/
+.streamlit/secrets.toml
+
+# Ficheros de bancos y exports: nunca al repo (se suben a la carpeta de Drive o se procesan en local)
+*.xls
+*.xlsx
+*.pdf
+transactions_*.csv
+*account-statement*.csv
+Movimientos_*.csv
+historico_patrimonio/
+exports_PP/
+*.json
+!config/*.json

@@ -1,0 +1,43 @@
+name: Sincronizar finanzas
+on:
+  schedule:
+    - cron: "15 6,18 * * *"   # dos veces al día (UTC); PSD2 permite hasta 4 accesos sin ti
+  workflow_dispatch:
+    inputs:
+      sin_bancos:
+        description: "Solo reclasificar (tras editar reglas o ajustes)"
+        type: boolean
+        default: false
+concurrency: { group: finanzas, cancel-in-progress: false }   # nunca dos ejecuciones a la vez
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+      - name: Pipeline
+        env:
+          PYTHONPATH: src
+          EB_APPLICATION_ID: ${{ secrets.EB_APPLICATION_ID }}
+          EB_PRIVATE_KEY: ${{ secrets.EB_PRIVATE_KEY }}
+          EB_ACCOUNTS: ${{ secrets.EB_ACCOUNTS }}
+          INDEXA_TOKEN: ${{ secrets.INDEXA_TOKEN }}
+          KRAKEN_API_KEY: ${{ secrets.KRAKEN_API_KEY }}
+          KRAKEN_API_SECRET: ${{ secrets.KRAKEN_API_SECRET }}
+          REVX_API_KEY: ${{ secrets.REVX_API_KEY }}
+          REVX_PRIVATE_KEY: ${{ secrets.REVX_PRIVATE_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          DRIVE_FOLDER_ENTRADA: ${{ secrets.DRIVE_FOLDER_ENTRADA }}
+          IBAN_BANCO_CORR: ${{ secrets.IBAN_BANCO_CORR }}
+          IBAN_TR: ${{ secrets.IBAN_TR }}
+          IBAN_REV_CONJ: ${{ secrets.IBAN_REV_CONJ }}
+          IBAN_REV_PERS: ${{ secrets.IBAN_REV_PERS }}
+          IBAN_MYINV: ${{ secrets.IBAN_MYINV }}
+          IBAN_INDEXA: ${{ secrets.IBAN_INDEXA }}
+          IBAN_KRAKEN: ${{ secrets.IBAN_KRAKEN }}
+        run: python -m finanzas.pipeline ${{ inputs.sin_bancos && '--sin-bancos' || '' }}

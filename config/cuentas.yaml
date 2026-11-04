@@ -1,0 +1,85 @@
+# ============================================================================================
+# CONFIGURACIÓN DE CUENTAS — PLANTILLA. Cámbialo todo por tus datos (ver docs/GUIA_PERSONALIZACION.md).
+# Los IBAN, claves y tokens NUNCA van aquí: van en .env (local) y en los secretos de GitHub.
+# ============================================================================================
+
+# Primer mes que clasifica el motor de reglas. Elige uno en el que tengas datos de TODAS tus cuentas.
+clasificar_desde: "2026-01"
+
+# Histórico revisado a mano (opcional). Si lo tienes, el pipeline lo usa tal cual entre «desde» y el mes
+# anterior a «corte». Si no, deja «fichero» vacío y todo lo clasifica el motor de reglas.
+historico:
+  fichero: ""
+  desde: ""
+  corte: ""
+
+# Nombres cortos: salen en categorías («Aportación Alex a conjunta») y en el dashboard.
+nombre_titular: "Alex"
+nombre_pareja: "Sam"          # la otra persona de la cuenta conjunta (si no tienes conjunta, déjalo igual)
+# Cómo aparecéis en los conceptos bancarios: MAYÚSCULAS y sin tildes.
+titular: "ALEX GARCIA LOPEZ"
+pareja: "SAM PEREZ RUIZ"
+alias_titular: ["ALEX GARCIA", "GARCIA LOPEZ ALEX"]
+alias_pareja: ["SAM PEREZ", "PEREZ RUIZ SAM"]
+
+# Una entrada por cuenta. id: corto y en mayúsculas; se usa en EB_ACCOUNTS, en los IBAN_* y en la hoja.
+# pct_titular: parte de cada gasto de esa cuenta que te corresponde (conjunta = 0.5).
+cuentas:
+  - id: BANCO_CORR
+    nombre: Banco principal (nómina)
+    fuente: enable_banking
+    aspsp: { name: "Nombre exacto del banco en Enable Banking", country: ES }
+    pct_titular: 1.0
+  - id: TR
+    nombre: Trade Republic
+    fuente: enable_banking                   # solo saldo y movimientos provisionales
+    movimientos_desde: trade_republic_csv    # el detalle (comercio) llega con su CSV de transacciones
+    provisional_enable_banking: true
+    aspsp: { name: "Trade Republic", country: ES }
+    pct_titular: 1.0
+  - id: REV_CONJ
+    nombre: Revolut conjunta
+    fuente: enable_banking
+    aspsp: { name: "Revolut", country: ES }
+    pct_titular: 0.5
+    conjunta: true
+  - id: REV_PERS
+    nombre: Revolut personal
+    fuente: enable_banking
+    aspsp: { name: "Revolut", country: ES }
+    pct_titular: 1.0
+  - id: MYINV
+    nombre: MyInvestor efectivo
+    fuente: myinvestor_csv                   # su conexión por Enable Banking falla: CSV manual
+    pct_titular: 1.0
+  - id: COVERFLEX
+    nombre: Coverflex (retribución flexible)
+    fuente: coverflex_csv
+    pct_titular: 1.0
+
+# Variables de entorno con el IBAN de cada cuenta propia (para reconocer traspasos entre tus cuentas).
+ibans_env: [IBAN_BANCO_CORR, IBAN_TR, IBAN_REV_CONJ, IBAN_REV_PERS, IBAN_MYINV]
+# IBAN de destino de aportaciones a inversión (p. ej. la cuenta de Indexa en Inversis): cuentan como ahorro.
+ibans_inversion_env: [IBAN_INDEXA, IBAN_KRAKEN]
+
+# Personas cuyos Bizum compensan compras que les hiciste (p. ej. un pedido de Amazon para ellas).
+compensan_compras: []
+# Familia: sus Bizum nunca se toman como «parte de una comida pagada por todos».
+familia: []
+
+inversion:
+  revolutx_pares: ["BTC-EUR"]
+  revolutx_desde: "2024-01-01"
+  # Código de Portfolio Performance → código oficial, si no coinciden (p. ej. planes de pensiones).
+  alias_activos: {}
+  # Plataformas en las que dejaste de actualizar Portfolio Performance.
+  pp_desactualizado: []
+  # Diferencias de la conciliación con PP ya revisadas: activo → motivo.
+  diferencias_explicadas: {}
+  # MyInvestor: fondos que compras con tus aportaciones (si no usas MyInvestor, deja la lista vacía).
+  myinvestor_fraccion_invertida: 1.0
+  myinvestor_dias_ejecucion: 2
+  myinvestor_fondos:
+    - nombre_en_extracto: "DEVELOPED WORLD|DEVL WRLD"   # cómo aparece en el CSV de MyInvestor (regex)
+      isin: "IE00BD0NCM55"                             # EJEMPLO: iShares Developed World Index
+      peso: 1.0                                        # fracción de cada aportación que va a este fondo
