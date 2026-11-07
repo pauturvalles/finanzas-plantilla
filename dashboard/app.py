@@ -356,6 +356,16 @@ def _dataframe_2dec(data=None, *args, column_config=None, **kwargs):
 
 
 st.dataframe = _dataframe_2dec
+_plotly_chart_original = st.plotly_chart
+
+
+def _plotly_chart_sin_barra(fig, *args, config=None, **kwargs):
+    """Sin la barra de herramientas de Plotly: en el móvil se queda fija encima de la leyenda.
+    Streamlit ya pone su propio botón de pantalla completa en cada gráfico."""
+    return _plotly_chart_original(fig, *args, config={"displayModeBar": False, **(config or {})}, **kwargs)
+
+
+st.plotly_chart = _plotly_chart_sin_barra
 
 
 # ------------------------------------------------------------------ datos
