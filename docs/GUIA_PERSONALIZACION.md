@@ -34,7 +34,7 @@ APIs de brókers/cripto ─┘    (GitHub Actions,          (tus datos)       (p
 
 ## 2. Crea tu repositorio (privado)
 
-1. Crea un repositorio **privado** en GitHub y copia ahí el contenido de esta plantilla. Tiene que ser privado: el pipeline guardará tus reglas y, si quieres, un histórico de movimientos.
+1. En la página de esta plantilla en GitHub, pulsa **Use this template → Create a new repository** y marca **Private**. Tiene que ser privado: guardarás tus reglas, tus cuentas y, si quieres, un histórico de movimientos. **No uses «Fork»**: un fork de un repositorio público es siempre público.
 2. En tu ordenador:
    ```powershell
    git clone <tu repo>
@@ -44,7 +44,8 @@ APIs de brókers/cripto ─┘    (GitHub Actions,          (tus datos)       (p
    pip install -r requirements.txt -r dashboard/requirements.txt
    python -m pytest -q                   # todo en verde = el entorno está bien
    ```
-3. Copia `.env.example` a `.env`. Ahí irán todas tus claves; **nunca se sube** (está en `.gitignore`).
+3. Comprueba que el dashboard arranca con `lanzadores/Demo.bat` (o `FINANZAS_DEMO=1 streamlit run dashboard/app.py`): verás la demo con datos inventados.
+4. Copia `.env.example` a `.env`. Ahí irán todas tus claves; **nunca se sube** (está en `.gitignore`).
 
 ## 3. Describe tus cuentas (`config/cuentas.yaml`)
 
@@ -152,6 +153,7 @@ Settings → Secrets and variables → Actions: crea un secreto por cada variabl
 ## 10. Dashboard
 
 - **En local**: copia `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` (o genera su contenido con `python -X utf8 scripts/secretos_streamlit.py`) y `streamlit run dashboard/app.py`.
+- Mientras no pongas `SHEET_ID`, el dashboard enseña la demo (con un aviso arriba). En cuanto lo configures, lee tu hoja.
 - **En Streamlit Community Cloud**: share.streamlit.io → tu repo (autoriza repos privados) → `dashboard/app.py`, Python 3.12, los dos secretos → Deploy. Después, Settings → Sharing: **privada**, solo tu email. Se duerme tras horas sin uso y tarda un minuto en despertar; alternativas: Hugging Face Spaces privado, Google Cloud Run.
 
 ## 11. Decisiones que tendrás que tomar

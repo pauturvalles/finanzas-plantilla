@@ -1,0 +1,31 @@
+# Configuración de la DEMO (persona inventada). La usa demo/generar_demo.py y el dashboard en modo demo.
+clasificar_desde: "2024-11"
+historico: {fichero: "", desde: "", corte: ""}
+
+nombre_titular: "Alex"
+nombre_pareja: "Sam"
+titular: "ALEX GARCIA LOPEZ"
+pareja: "SAM PEREZ RUIZ"
+alias_titular: ["ALEX GARCIA", "GARCIA LOPEZ ALEX"]
+alias_pareja: ["SAM PEREZ", "PEREZ RUIZ SAM"]
+
+cuentas:
+  - {id: BANCO_CORR, nombre: Banco principal (nómina), fuente: enable_banking, pct_titular: 1.0}
+  - {id: TR, nombre: Trade Republic (ahorro), fuente: enable_banking, pct_titular: 1.0}
+  - {id: REV_CONJ, nombre: Revolut conjunta, fuente: enable_banking, pct_titular: 0.5, conjunta: true}
+  - {id: MYINV, nombre: MyInvestor efectivo, fuente: myinvestor_csv, pct_titular: 1.0}
+
+ibans_env: []
+ibans_inversion_env: []
+compensan_compras: []
+familia: []
+
+inversion:
+  alias_activos: {}
+  pp_desactualizado: []
+  diferencias_explicadas: {}
+  myinvestor_fraccion_invertida: 1.0
+  myinvestor_dias_ejecucion: 2
+  myinvestor_fondos:
+    - {nombre_en_extracto: "DEVELOPED WORLD", isin: "IE00BD0NCM55", peso: 0.8}
+    - {nombre_en_extracto: "EMERGING MARKETS", isin: "IE00BYWYCC39", peso: 0.2}

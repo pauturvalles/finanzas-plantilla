@@ -21,7 +21,7 @@ import yaml
 from . import fiscal, patrimonio, reglas
 from .fuentes import (coverflex, enable_banking, indexa, kraken, myinvestor, revolut_csv, revolutx, sabadell, trade_republic,
                       trade_republic_csv, valores_liquidativos)
-from .modelo import COLUMNAS_MOV, COLUMNAS_RAW, asignar_ids, posibles_duplicados, resolver_fuentes, upsert, vacio_raw
+from .modelo import COLUMNAS_MOV, COLUMNAS_RAW, aplicar_desgloses, asignar_ids, posibles_duplicados, resolver_fuentes, upsert, vacio_raw
 from .sheets import Hoja, a_numero, ficheros_de_carpeta
 
 RAIZ = Path(__file__).resolve().parents[2]
@@ -154,14 +154,26 @@ def ejecutar(sin_bancos: bool = False) -> None:
     raw_limpio, descartadas = resolver_fuentes(raw)
     if len(descartadas):
         anotar("Duplicados entre fuentes", "ok", len(descartadas), "descartadas por haber una fuente prioritaria ese día")
+    # Pagos únicos que agrupan varios gastos (p. ej. facturas atrasadas): se sustituyen por sus partes.
+    raw_limpio, clas_desg, avisos_desg = aplicar_desgloses(raw_limpio, hoja.leer("desgloses"))
+    for a_ in avisos_desg:
+        anotar("Desgloses", "ok", detalle=a_)
     mov_nuevos = reglas.clasificar(raw_limpio, reg, hoja.leer("ajustes"), cfg) if not raw_limpio.empty else pd.DataFrame(columns=COLUMNAS_MOV)
+    if not clas_desg.empty:  # cada línea con la categoría indicada; cuentan como gasto fijo
+        for _, c_ in clas_desg.iterrows():
+            i_ = mov_nuevos["tx_id"] == c_["tx_id"]
+            mov_nuevos.loc[i_, ["categoria", "subcategoria"]] = [c_["categoria"], c_["subcategoria"]]
+            mov_nuevos.loc[i_ & (mov_nuevos["importe"].astype(float) < 0), ["flujo", "tipo_gasto"]] = ["Gasto", "Fijo"]
+            mov_nuevos.loc[i_ & (mov_nuevos["importe"].astype(float) >= 0), ["flujo", "tipo_gasto"]] = ["Gasto", "Fijo"]  # devolución: resta del gasto
+            mov_nuevos.loc[i_, "nota"] = f"Desglose de «{c_['grupo']}»"
     # Meses clasificados por el motor: desde `clasificar_desde` hasta el inicio del histórico revisado,
     # y desde el corte en adelante. El histórico revisado a mano (si existe) manda siempre.
     desde_cfg = cfg.get("clasificar_desde", CORTE_MES)
     hc = cfg.get("historico") or {}
     if hc.get("fichero") and (RAIZ / hc["fichero"]).exists():
         h_desde, corte = hc.get("desde", HISTORICO_DESDE), hc.get("corte", CORTE_MES)
-        mov_nuevos = mov_nuevos[(mov_nuevos["mes"] >= corte) | ((mov_nuevos["mes"] >= desde_cfg) & (mov_nuevos["mes"] < h_desde))]
+        desg = mov_nuevos["tx_id"].isin(clas_desg["tx_id"]) if not clas_desg.empty else False  # los desgloses entran en su mes, sea cual sea
+        mov_nuevos = mov_nuevos[(mov_nuevos["mes"] >= corte) | ((mov_nuevos["mes"] >= desde_cfg) & (mov_nuevos["mes"] < h_desde)) | desg]
     else:  # sin histórico revisado: el motor clasifica todo desde «clasificar_desde»
         mov_nuevos = mov_nuevos[mov_nuevos["mes"] >= desde_cfg]
     mov = pd.concat([_historico(cfg), mov_nuevos], ignore_index=True)

@@ -105,6 +105,13 @@ def resolver_fuentes(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     # días hasta su última fecha, y la fecha contable de la API puede ir 1–3 días por detrás de la
     # de la operación. Se quitan los provisionales hasta el último día del fichero y, en los días
     # siguientes, los que tengan una operación del fichero del mismo importe a ≤ 4 días.
+    # Cuentas que pasan de ficheros a conexión (p. ej. el Sabadell): desde el primer día con datos de la API,
+    # los ficheros ya no cuentan. Así no se duplica un cargo que el Excel y la API fechan en días distintos.
+    for cuenta in r.loc[r["fuente"] == "enable_banking", "cuenta"].unique():
+        if cuenta in PRIORIDAD_POR_CUENTA:
+            continue  # Trade Republic: ahí la API es la provisional (se trata abajo)
+        primero = r.loc[(r["cuenta"] == cuenta) & (r["fuente"] == "enable_banking"), "fecha"].min()
+        quitar |= (r["cuenta"] == cuenta) & (r["fuente"] != "enable_banking") & (r["fecha"] >= primero)
     for cuenta, orden in PRIORIDAD_POR_CUENTA.items():
         prov = orden[-1]
         fich = r[(r["cuenta"] == cuenta) & (r["fuente"] != prov)]
@@ -132,3 +139,43 @@ def posibles_duplicados(raw: pd.DataFrame) -> pd.DataFrame:
     g = raw.groupby(["cuenta", "fecha", "importe"])
     dup = raw[g["tx_id"].transform("count") > 1]
     return dup[dup.groupby(["cuenta", "fecha", "importe"])["fuente"].transform("nunique") > 1].sort_values(["cuenta", "fecha", "importe"])
+
+
+def aplicar_desgloses(raw: pd.DataFrame, desgloses: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    """Sustituye un pago único por sus partes (pestaña `desgloses` de la hoja).
+
+    Cada grupo indica la cuenta y el importe total del pago; cuando llega un cargo de esa cuenta por ese
+    importe (±0,01 €) y con fecha posterior a la primera línea, se quita y se añaden sus líneas: cada una con
+    su fecha (si está vacía, la del pago), concepto e importe. Si el pago aún no ha llegado, no se hace nada.
+    Devuelve (raw con las líneas, clasificación de las líneas [tx_id, categoria, subcategoria], avisos)."""
+    from .sheets import a_numero
+    if desgloses is None or desgloses.empty:
+        return raw, pd.DataFrame(), []
+    d = desgloses.copy()
+    d["importe"] = a_numero(d["importe"])
+    d["importe_pago"] = a_numero(d["importe_pago"])
+    d["fecha_l"] = pd.to_datetime(d["fecha"].astype(str).str.strip().replace("", None), format="mixed", dayfirst=True, errors="coerce")
+    raw = raw.copy()
+    nuevos, clas, avisos, usados = [], [], [], set()
+    for grupo, g in d.groupby("grupo"):
+        cuenta, total = str(g["cuenta"].iloc[0]).strip(), float(g["importe_pago"].iloc[0])
+        if abs(g["importe"].sum() + total) > 0.02:
+            avisos.append(f"«{grupo}»: las líneas suman {-g['importe'].sum():.2f} € y el pago es de {total:.2f} €")
+        desde = g["fecha_l"].min()
+        cand = raw[(raw["cuenta"] == cuenta) & ((raw["importe"].astype(float) + total).abs() < 0.011) & ~raw["tx_id"].isin(usados)]
+        if pd.notna(desde):
+            cand = cand[pd.to_datetime(cand["fecha"]) >= desde]
+        if cand.empty:
+            avisos.append(f"«{grupo}»: aún no ha llegado el pago de {total:.2f} € en {cuenta}")
+            continue
+        pago = cand.sort_values("fecha").iloc[0]
+        usados.add(pago["tx_id"])
+        for k, (_, l) in enumerate(g.iterrows()):
+            fecha = l["fecha_l"].strftime("%Y-%m-%d") if pd.notna(l["fecha_l"]) else pago["fecha"]
+            tx = hashlib.sha1(f"{pago['tx_id']}|{k}".encode()).hexdigest()[:16]
+            nuevos.append({**pago.to_dict(), "tx_id": tx, "fecha": fecha, "concepto": str(l.get("concepto") or pago["concepto"]),
+                           "importe": float(l["importe"]), "fuente": "desglose"})
+            clas.append({"tx_id": tx, "categoria": l.get("categoria", ""), "subcategoria": l.get("subcategoria", ""), "grupo": grupo})
+    if nuevos:
+        raw = pd.concat([raw[~raw["tx_id"].isin(usados)], pd.DataFrame(nuevos)[raw.columns]], ignore_index=True)
+    return raw, pd.DataFrame(clas), avisos

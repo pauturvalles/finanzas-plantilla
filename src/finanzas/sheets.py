@@ -13,8 +13,6 @@ import re
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly"]
 
@@ -30,6 +28,7 @@ MANUALES = {
     "inversiones_manual": ["plataforma", "producto", "fecha", "valor"],
     "presupuestos": ["categoria", "presupuesto_mensual", "nota"],
     "posiciones_manual": ["categoria", "plataforma", "isin", "nombre", "cantidad", "valor", "coste_fiscal", "fecha"],
+    "desgloses": ["grupo", "cuenta", "importe_pago", "fecha", "concepto", "categoria", "subcategoria", "importe"],
     "costes_fiscales": ["categoria", "isin", "fecha", "coste_fiscal", "plusvalia_latente", "valor", "nota"],
 }
 
@@ -95,6 +94,9 @@ def ficheros_de_carpeta(extension: str, folder_id: str | None = None) -> list[tu
     Se listan todos los ficheros y se filtra aquí: el filtro `name contains` de Drive
     solo compara prefijos de palabra y no sirve para extensiones. Si Drive convirtió
     un CSV en Hoja de cálculo al subirlo, se exporta de vuelta a CSV."""
+    # Import aquí: el dashboard (y la demo) no usan Drive ni instalan esta librería.
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseDownload
     drive = build("drive", "v3", credentials=_creds(), cache_discovery=False)
     carpeta = folder_id or os.environ.get("DRIVE_FOLDER_ENTRADA") or os.environ["DRIVE_FOLDER_COVERFLEX"]
     tipos = {".csv": ("text/csv", "application/vnd.google-apps.spreadsheet"), ".pdf": ("application/pdf",),

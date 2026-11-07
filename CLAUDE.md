@@ -33,6 +33,7 @@ Con eso: rellena `config/cuentas.yaml`, decide qué fuentes conectar por Enable 
 | `src/finanzas/fuentes/` | Un lector por fuente |
 | `dashboard/app.py` | Dashboard (D3 incluido en `dashboard/vendor/`) |
 | `config/` | `cuentas.yaml`, `reglas_comercios.csv`, `costes.yaml` |
+| `demo/` | Modo demo: `generar_demo.py` crea datos inventados (persona «Alex») con el motor real; el dashboard los usa si no hay `SHEET_ID` o con `FINANZAS_DEMO=1` |
 
 ## Principios (respétalos)
 

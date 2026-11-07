@@ -5,10 +5,14 @@ Secretos (Streamlit Cloud → Settings → Secrets, o .streamlit/secrets.toml en
     GOOGLE_SERVICE_ACCOUNT_JSON = '''{ ... }'''
     SHEET_ID = "..."
 Ejecutar en local:  streamlit run dashboard/app.py
+
+Modo demo (datos inventados de demo/datos, sin hoja ni secretos): MODO_DEMO = true en los secretos,
+la variable de entorno FINANZAS_DEMO=1, o simplemente no tener SHEET_ID configurado.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 
 import gspread
@@ -25,6 +29,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from finanzas.fiscal import cuota_ahorro, simular_venta  # noqa: E402
 
 st.set_page_config(page_title="Finanzas personales", page_icon="💶", layout="wide")
+
+
+def _secreto(clave: str, defecto=None):
+    try:
+        return st.secrets.get(clave, defecto)
+    except Exception:  # sin fichero de secretos (p. ej. la demo en local)
+        return defecto
+
+
+RAIZ = Path(__file__).resolve().parents[1]
+DEMO = str(os.environ.get("FINANZAS_DEMO", "")).lower() in ("1", "true", "si", "sí") \
+    or str(_secreto("MODO_DEMO", "")).lower() in ("1", "true", "si", "sí") or not _secreto("SHEET_ID")
+DIR_CONFIG = RAIZ / ("demo/config" if DEMO else "config")
 
 MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 # Paleta apagada (menos saturada) que funciona en modo claro y oscuro.
@@ -351,8 +368,35 @@ def _hoja():
     return gspread.authorize(cred).open_by_key(st.secrets["SHEET_ID"])
 
 
-@st.cache_data(ttl=1800, show_spinner="Leyendo la hoja…")
 def pestana(nombre: str) -> pd.DataFrame:
+    """Una pestaña de la hoja como texto (o, en la demo, su CSV; con lo editado en esta sesión si lo hay)."""
+    if DEMO:
+        editadas = st.session_state.get("_demo_editadas", {})
+        if nombre in editadas:
+            return editadas[nombre].copy()
+        return _pestana_demo(nombre, _demo_al_dia()).copy()
+    return _pestana_hoja(nombre)
+
+
+@st.cache_resource(ttl=6 * 3600, show_spinner="Preparando los datos de la demo…")
+def _demo_al_dia() -> str:
+    """Regenera los datos inventados si no llegan hasta ayer, para que la demo siempre esté al día."""
+    saldos = RAIZ / "demo" / "datos" / "saldos.csv"
+    ayer = (pd.Timestamp.today().normalize() - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    if not saldos.exists() or pd.read_csv(saldos)["fecha"].max() < ayer:
+        import runpy
+        runpy.run_path(str(RAIZ / "demo" / "generar_demo.py"), run_name="__main__")
+    return ayer
+
+
+@st.cache_data
+def _pestana_demo(nombre: str, al_dia: str = "") -> pd.DataFrame:
+    f = RAIZ / "demo" / "datos" / f"{nombre}.csv"
+    return pd.read_csv(f, dtype=str, keep_default_na=False) if f.exists() else pd.DataFrame()
+
+
+@st.cache_data(ttl=1800, show_spinner="Leyendo la hoja…")
+def _pestana_hoja(nombre: str) -> pd.DataFrame:
     try:
         filas = _hoja().worksheet(nombre).get_all_values(value_render_option="UNFORMATTED_VALUE",
                                                          date_time_render_option="FORMATTED_STRING")
@@ -366,7 +410,7 @@ def pestana(nombre: str) -> pd.DataFrame:
 @st.cache_data
 def _costes() -> dict:
     import yaml
-    return yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "costes.yaml").read_text(encoding="utf-8"))
+    return yaml.safe_load((DIR_CONFIG / "costes.yaml").read_text(encoding="utf-8"))
 
 
 def comercio_norm(c: str) -> str:
@@ -383,7 +427,11 @@ def valor_futuro(mensual: float, anos: int, rent: float) -> float:
 
 
 def guardar_pestana(nombre: str, df: pd.DataFrame):
-    """Sobrescribe una pestaña pequeña de la hoja con lo editado en el dashboard."""
+    """Sobrescribe una pestaña pequeña de la hoja con lo editado en el dashboard (en la demo, solo en esta sesión)."""
+    if DEMO:
+        st.session_state.setdefault("_demo_editadas", {})[nombre] = df.astype(str).reset_index(drop=True)
+        st.toast("Demo: el cambio se guarda solo mientras tengas abierta esta página.", icon="ℹ️")
+        return
     try:
         ws = _hoja().worksheet(nombre)
     except gspread.WorksheetNotFound:
@@ -429,7 +477,7 @@ def serie_patrimonio() -> pd.Series:
 @st.cache_data
 def _cuentas_cfg() -> dict:
     import yaml
-    return yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "cuentas.yaml").read_text(encoding="utf-8"))
+    return yaml.safe_load((DIR_CONFIG / "cuentas.yaml").read_text(encoding="utf-8"))
 
 
 def rentabilidad_por_activo(det: pd.DataFrame, pp: pd.DataFrame, rx: pd.DataFrame, trv: pd.DataFrame) -> pd.DataFrame:
@@ -489,9 +537,6 @@ def movimientos() -> pd.DataFrame:
     for c in ("mes", "fecha", "flujo", "categoria", "subcategoria", "tipo_gasto", "naturaleza", "comercio", "cuenta", "concepto", "nota", "regla"):
         m[c] = m[c].astype(str).replace("nan", "") if c in m.columns else ""
     m["mes"] = m["mes"].str[:7]
-    g = m["categoria"].str.startswith("Golf · ")  # formato antiguo
-    m.loc[g, "subcategoria"] = m.loc[g, "categoria"].str.replace("Golf · ", "", regex=False).str.capitalize()
-    m.loc[g, "categoria"] = "Golf"
     return m
 
 
@@ -592,6 +637,10 @@ margen = (ing_mes - gas_mes) / ing_mes if ing_mes else np.nan
 _cfg_nombres = _cuentas_cfg()
 YO, OTRO = _cfg_nombres.get("nombre_titular", "Titular"), _cfg_nombres.get("nombre_pareja", "Pareja")
 st.title(f"Finanzas de {YO}")
+if DEMO:
+    st.info("**Demo con datos inventados.** Alex cobra 2.000 € netos al mes, comparte piso con Sam (cuenta conjunta al 50 %), "
+            "invierte cada mes en dos fondos indexados y le gustan el gimnasio, la guitarra y el cine. Puedes tocarlo todo: "
+            "lo que edites solo dura mientras tengas la página abierta.", icon="🧪")
 st.caption(f"{mes_lab(periodo[0])} – {mes_lab(periodo[-1])} · ingresas {eur(ing_mes)} al mes, gastas {eur(gas_mes)} y ahorras el {pct(margen)}.")
 
 # Avisos de datos
@@ -1265,18 +1314,21 @@ with T["patrimonio"]:
 
         # ---------- Evolución: capital aportado desde el primer dato + valor de cada día con foto
         st.subheader("Evolución", help="Línea: capital neto invertido (compras − ventas de fondos, ETF y cripto según Portfolio Performance y, "
-                     "después, las fuentes oficiales). Baja cuando sacas dinero de las inversiones a tus cuentas: p. ej. en abril de 2026, al pasar a euros los USDC de la venta de BTC. Áreas: valor del patrimonio en los días en que hay foto (desde que funciona el pipeline). "
+                     "después, las fuentes oficiales). Baja cuando sacas dinero de las inversiones a tus cuentas: Áreas: valor del patrimonio en los días en que hay foto (desde que funciona el pipeline). "
                      "Hasta el último mes reconstruido, el valor sale de scripts/reconstruir_historico.py (mes a mes, con precios históricos); después, de las fotos diarias.")
         fig = go.Figure()
         ops_e = pestana("pp_operaciones").copy()
-        if not ops_e.empty:
+        if ops_e.empty:  # sin Portfolio Performance: solo las aportaciones de los movimientos
+            ops_e = pd.DataFrame({"fecha": [pd.Timestamp("1900-01-01")], "activo": ["-"], "tipo": ["-"], "importe": [0.0]})
+        if True:
             ops_e["importe"], ops_e["fecha"] = num(ops_e["importe"]), pd.to_datetime(ops_e["fecha"], errors="coerce")
             sig = {"compra": 1, "venta": -1}
             es_f = ops_e["activo"].str.match(r"^([A-Z]{2}[A-Z0-9]{9}\d|0P|N\d{4}$)")
             ops_e["cat"] = np.where(es_f, "Fondos y ETF", "Cripto")
+            corte_pp = ops_e["fecha"].max()
             ops_e = ops_e[ops_e["tipo"].isin(sig)]
-            extra = m_all[(m_all["flujo"] == "Ahorro / inversión") & (pd.to_datetime(m_all["fecha"]) > ops_e["fecha"].max())]
-            ap = pd.concat([ops_e.assign(flujo=ops_e["tipo"].map(sig) * ops_e["importe"].abs())[["fecha", "cat", "flujo"]],
+            extra = m_all[(m_all["flujo"] == "Ahorro / inversión") & (pd.to_datetime(m_all["fecha"]) > corte_pp)]
+            ap = pd.concat([ops_e.assign(flujo=ops_e["tipo"].map(sig).astype(float) * ops_e["importe"].abs())[["fecha", "cat", "flujo"]],
                             pd.DataFrame({"fecha": pd.to_datetime(extra["fecha"]), "cat": "Fondos y ETF", "flujo": -extra["importe"]})])
             if cats_pat:
                 quiere = {"Cripto"} if set(cats_pat) <= {"Cripto"} else ({"Fondos y ETF"} if "Cripto" not in cats_pat else {"Fondos y ETF", "Cripto"})
@@ -1416,6 +1468,8 @@ with T["patrimonio"]:
             st.subheader("Efectivo que no rinde", help="Saldo de cada cuenta (la conjunta, tu mitad), su remuneración y lo que dejarías de ganar al año "
                          "por el dinero en cuentas al 0 % por encima de lo que necesitas para el día a día.")
             cu = det_c[det_c["categoria"] == "Efectivo en cuentas"][["activo", "nombre", "valor"]].copy()
+            nombres_cta = {c_["id"]: c_.get("nombre", c_["id"]) for c_ in _cuentas_cfg().get("cuentas", [])}
+            cu["nombre"] = cu["activo"].map(nombres_cta).fillna(cu["nombre"])
             rem = cfg_c.get("remuneracion", {})
             # Interés real de Trade Republic: lo cobrado en los últimos meses completos ÷ saldo
             intereses = m_all[(m_all["cuenta"] == "TR") & m_all["concepto"].str.contains("Interest|Intereses", case=False, na=False) & (m_all["importe"] > 0)]
@@ -1515,17 +1569,21 @@ with T["inversiones"]:
             ops_r["flujo"] = np.where(ops_r["tipo"] == "compra", -1, 1) * ops_r["importe"].abs()
             fondo = ops_r["activo"].str.match(PATRON_FONDO)
             plan = ops_r["activo"].str.startswith(("0P", "N5"))
-            grupos = {"Fondos indexados (todas las plataformas)": fondo & ~plan & ~ops_r["cuenta_pp"].isin(["Trade_Republic"]),
+            grupos = {"Fondos indexados (Sabadell → Indexa → MyInvestor)": fondo & ~plan & ops_r["cuenta_pp"].isin(["Sabadell", "Indexa", "MyInvestor"]),
                       "Plan de pensiones Indexa": plan, "Cripto": ~fondo}
             for g_, mask in grupos.items():
                 flujos_por[g_] = list(zip(ops_r.loc[mask, "fecha"], ops_r.loc[mask, "flujo"]))
             ultima_pp = ops_r["fecha"].max()
             sub = m_all[(m_all["cuenta"] == "MYINV") & (m_all["flujo"] == "Ahorro / inversión") & (pd.to_datetime(m_all["fecha"]) > ultima_pp)]
-            flujos_por["Fondos indexados (todas las plataformas)"] += list(zip(pd.to_datetime(sub["fecha"]), sub["importe"]))
+            flujos_por["Fondos indexados (Sabadell → Indexa → MyInvestor)"] += list(zip(pd.to_datetime(sub["fecha"]), sub["importe"]))
             if not rx.empty:
                 r_ = rx.assign(fecha=pd.to_datetime(rx["fecha"]), importe=num(rx["importe"]))
                 r_ = r_[(r_["fecha"] > ultima_pp) & r_["tipo"].isin(["compra", "venta"]) & r_["importe"].notna()]
                 flujos_por["Cripto"] += list(zip(r_["fecha"], np.where(r_["tipo"] == "compra", -r_["importe"], r_["importe"])))
+        else:  # sin Portfolio Performance: las suscripciones de MyInvestor de los movimientos
+            sub = m_all[(m_all["cuenta"] == "MYINV") & (m_all["flujo"] == "Ahorro / inversión")]
+            if len(sub):
+                flujos_por["Fondos MyInvestor"] = list(zip(pd.to_datetime(sub["fecha"]), sub["importe"]))
         if not trv.empty:
             trv["importe"], trv["cantidad"] = num(trv["importe"]), num(trv["cantidad"])
             t_ = trv[trv["tipo"].isin(["BUY", "SELL"])]
@@ -1541,12 +1599,15 @@ with T["inversiones"]:
             filas = []
             for k in ("Fondos Indexa", "Fondos MyInvestor"):
                 if k in c_.index:
-                    filas.append({"Inversión": k, "Valor actual": val(k), "Valor de compra": apo(k), "Aportación real": fis(k), "TIR anual": np.nan})
-            g_f = "Fondos indexados (todas las plataformas)"
+                    f_k = flujos_por.get(k, [])
+                    filas.append({"Inversión": k, "Valor actual": val(k), "Valor de compra": apo(k), "Aportación real": fis(k),
+                                  "TIR anual": xirr(f_k + [(hoy, val(k))]) if f_k else np.nan})
+            g_f = "Fondos indexados (Sabadell → Indexa → MyInvestor)"
             v_f = val("Fondos Indexa") + val("Fondos MyInvestor")
-            filas.append({"Inversión": "Total fondos indexados", "Valor actual": v_f, "Valor de compra": apo("Fondos Indexa") + apo("Fondos MyInvestor"),
-                          "Aportación real": fis("Fondos Indexa") + fis("Fondos MyInvestor"),
-                          "TIR anual": xirr(flujos_por.get(g_f, []) + [(hoy, v_f)]) if flujos_por.get(g_f) else np.nan})
+            if {"Fondos Indexa", "Fondos MyInvestor"} <= set(c_.index):  # el total solo tiene sentido con las dos
+                filas.append({"Inversión": "Total fondos indexados", "Valor actual": v_f, "Valor de compra": apo("Fondos Indexa") + apo("Fondos MyInvestor"),
+                              "Aportación real": fis("Fondos Indexa") + fis("Fondos MyInvestor"),
+                              "TIR anual": xirr(flujos_por.get(g_f, []) + [(hoy, v_f)]) if flujos_por.get(g_f) else np.nan})
             for k, g_ in (("Plan de pensiones Indexa", "Plan de pensiones Indexa"), ("ETF y acciones Trade Republic", "ETF y acciones Trade Republic"), ("Cripto", "Cripto")):
                 if k not in c_.index:
                     continue
@@ -1754,7 +1815,7 @@ with T["fiscal"]:
     st.subheader("Cripto: ventas y permutas por ejercicio",
                  help="FIFO por activo sumando todos los exchanges. Cada permuta cripto-cripto cuenta como venta. Los traspasos entre cuentas propias no.")
     if fv.empty:
-        st.info("Aún no hay cálculo fiscal: ejecuta el pipeline con el histórico de Portfolio Performance subido.")
+        st.info("En la demo, Alex no tiene cripto." if DEMO else "Aún no hay cálculo fiscal: ejecuta el pipeline con el histórico de Portfolio Performance subido.")
     else:
         for c_ in ("importe_venta", "coste_fifo", "ganancia", "sin_lote", "cantidad"):
             fv[c_] = num(fv[c_])
@@ -1845,7 +1906,7 @@ with T["vivienda"]:
         precio = c[0].number_input("Precio (€)", 0, 3_000_000, v_("precio"), 5_000)
         entrada = c[1].number_input("Entrada (%)", 0.0, 100.0, v_("entrada"), 1.0) / 100
         gastos_c = c[2].number_input("Impuestos y gastos de compra (%)", 0.0, 30.0, v_("gastos_compra"), 0.5,
-                                     help="ITP de segunda mano de tu comunidad autónoma más notaría, registro y gestoría (estimación).") / 100
+                                     help="ITP de segunda mano en Cataluña más notaría, registro y gestoría (estimación).") / 100
         tipo = c[3].number_input("Tipo de interés (% anual)", 0.0, 15.0, v_("tipo"), 0.05) / 100
         c = st.columns(4)
         plazo = c[0].number_input("Plazo (años)", 1, 40, v_("plazo"))
@@ -1949,7 +2010,7 @@ with T["estado"]:
             for _, r in elegidos.iterrows():
                 fl_, tp_ = perfil.loc[r["categoria"], "flujo"], perfil.loc[r["categoria"], "tipo"]
                 if r["aplicar_a"] == "Todos los de este comercio":
-                    # Patrón: el concepto sin cifras ni referencias, escapado (p. ej. «COMPRA TARJ. COMERCIO EJEMPLO-CIUDAD»).
+                    # Patrón: el concepto sin cifras ni referencias, escapado (p. ej. «COMPRA TARJ. LM PASEO SANT JOAN-BADALONA»).
                     import unicodedata
                     txt_c = unicodedata.normalize("NFKD", str(r["concepto"]).upper()).encode("ascii", "ignore").decode()
                     palabras_c = [w for w in txt_c.split() if not re.search(r"\d", w)]

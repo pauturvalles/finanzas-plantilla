@@ -28,3 +28,4 @@ Rellena este documento a medida que avances: es la memoria del proyecto (para ti
 ## Bitácora
 
 - …
+- **7/11/2026:** modo demo con datos inventados (`demo/`, persona «Alex»), lanzador `Demo.bat`, desgloses de pagos únicos, paso de ficheros a conexión por API sin duplicar (p. ej. un banco que antes se subía en Excel), rentabilidad y capital invertido sin Portfolio Performance, compatibilidad con pandas 3.1.

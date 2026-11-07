@@ -1,0 +1,39 @@
+prioridad,patron,cuenta,categoria,subcategoria,tipo_gasto,flujo,nota
+5,NOMINA,,Nómina,,,Ingreso,
+5,INTEREST|DIVIDEND|CASH REWARD|SAVEBACK|INTERESES ABONADOS,,"Intereses, dividendos y cashback",,,Ingreso,
+5,STOCKPERK|GIFT LOTTERY,TR,"Intereses, dividendos y cashback",,,Ingreso,Promociones de Trade Republic
+5,MANGOPAY,,Ventas de segunda mano (Vinted),,,Ingreso,
+5,INDEXA,,Inversión: Indexa Capital,,,Ahorro / inversión,
+5,SAVINGS PLAN|BUY TRADE,TR,Inversión: Trade Republic,,,Ahorro / inversión,
+5,SUSCRIPCION LIC,MYINV,Inversión: MyInvestor,,,Ahorro / inversión,Suscripción de fondo
+4,DEVELOPED WORLD|DEVL WRLD,MYINV,Inversión: MyInvestor,,,Ahorro / inversión,Suscripción de fondo
+4,^PERIODO \d,MYINV,"Intereses, dividendos y cashback",,,Ingreso,Intereses cuenta MyInvestor
+3,POCKET|HUCHA|SAVINGS,,Traspaso entre cuentas propias,,,Traspaso interno,Huchas de Revolut
+6,GLOVO|JUST EAT|UBER EATS|DELIVEROO|TAKE ?AWAY,,Restauración y delivery,Delivery y comida para llevar,Variable,Gasto,
+6,COFFEE|CAFETERIA|CAFE ,,Restauración y delivery,"Cafés, desayunos y brunch",Variable,Gasto,
+6,VINTED,,Ropa y calzado,Segunda mano (Vinted),Variable,Gasto,
+6,STEAM|ENEBA|INSTANT GAMING|PLAYSTATION|NINTENDO|XBOX,,Videojuegos y ocio digital,,Variable,Gasto,
+10,ALQUILER|ARRENDAMIENTO,,Vivienda: alquiler,,Fijo,Gasto,
+20,FIBRA|MOVISTAR|VODAFONE|ORANGE|DIGI|O2 ,,Suministros y telecom,,Fijo,Gasto,
+20,ENDESA|IBERDROLA|NATURGY|AIGUES|CANAL DE ISABEL,,Suministros y telecom,,Fijo,Gasto,
+40,SEGURO|MAPFRE|MUTUA|SANITAS|ADESLAS,,Seguros,,Fijo,Gasto,
+50,IRPF|AEAT|AGENCIA TRIBUTARIA|DNI/PASAPORTE,,Impuestos y trámites,,Variable,Gasto,
+60,FARMAC|PROMOFARMA|DERMATOLOG|DENTAL|CLINICA|BARBER|PELUQUER,,Salud y cuidado personal,,Variable,Gasto,
+90,SPOTIFY|NETFLIX|AMAZON PRIME|DISNEY|HBO|MAX |YOUTUBE PREMIUM|ICLOUD|GOOGLE ONE,,Suscripciones,,Fijo,Gasto,
+100,MERCADONA|BONAREA|BON ?PREU|AMETLLER|CONSUM|CAPRABO|CARREFOUR|^DIA$|LIDL|ALDI|EROSKI|ALCAMPO|HIPERCOR|SPAR|PANADERIA|PASTELERIA,,Supermercado y alimentación,,Variable,Gasto,
+110,MANGO|ZARA|PRIMARK|UNIQLO|ADIDAS|NIKE|ZALANDO|DECATHLON|H&M|PULL&BEAR|BERSHKA|SHEIN,,Ropa y calzado,,Variable,Gasto,
+120,BOOKING|AIRBNB|RYANAIR|VUELING|IBERIA|TRIP\.COM|HOTEL|PARADOR|RENFE|OUIGO|IRYO|TRAINLINE|GETYOURGUIDE,,Viajes,,Variable,Gasto,
+130,BICING|TMB|METRO|TAXI|FREE NOW|CABIFY|UBER|PARKING|REPSOL|CEPSA|GALP|BP ,,Transporte,,Variable,Gasto,
+140,TEATRE|TEATRO|CINE|TIQETS|TICKETMASTER|MUSEO|LOTER,,Ocio y cultura,,Variable,Gasto,
+150,FUNDACI|ONG |CRUZ ROJA|UNICEF|MEDICOS SIN|CARITAS|ACNUR|FLORISTERIA,,Regalos y donaciones,,Variable,Gasto,
+160,AMAZON|AMZN|TEMU|ALIEXPRESS|PAYPAL|WALLAPOP|EL CORTE INGL|MEDIA ?MARKT|FNAC|IKEA|LEROY MERLIN|XIAOMI,,Compras y tecnología,,Variable,Gasto,
+170,REINTEGRO|CAJERO|RETIRADA DE EFECTIVO,,Efectivo,,Variable,Gasto,
+210,COMISION,,Comisiones bancarias,,Variable,Gasto,
+4,EMERGING MARKETS,MYINV,Inversión: MyInvestor,,,Ahorro / inversión,Suscripción de fondo
+8,BASIC-FIT|BASIC FIT|DIR |ALTAFIT|FITNESS,,Deporte y gimnasio,Gimnasio,Fijo,Gasto,
+8,DECATHLON,,Deporte y gimnasio,Material deportivo,Variable,Gasto,
+9,ESCOLA DE MUSICA|ESCUELA DE MUSICA,,Música (guitarra),Clases,Fijo,Gasto,
+9,THOMANN|MUSICOPOLIX|MUSICAL,,Música (guitarra),Material y cuerdas,Variable,Gasto,
+9,GUITARRA NUEVA,,Música (guitarra),Instrumentos,Extraordinario,Gasto,Compra puntual
+135,CINESA|YELMO|CINES|FILMIN|VERDI,,Ocio y cultura,Cine,Variable,Gasto,
+65,RESTAURANTE|BAR |TABERNA|PIZZER|BURGER|SUSHI|RAMEN|TAPAS,,Restauración y delivery,Restaurantes y cenas,Variable,Gasto,

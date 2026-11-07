@@ -85,7 +85,8 @@ def test_una_fuente_por_cuenta_y_dia():
     eb = _raw([("BANCO_CORR", "2026-11-03", "GLOVO 03NOV", -20.0, "", "")]).assign(fuente="enable_banking")
     solo_excel = _raw([("BANCO_CORR", "2026-11-04", "MERCADONA", -30.0, "", "")]).assign(fuente="sabadell_xls")
     limpio, fuera = resolver_fuentes(pd.concat([excel, eb, solo_excel], ignore_index=True))
-    assert list(limpio["fuente"]) == ["enable_banking", "sabadell_xls"] and len(fuera) == 1
+    # Desde el primer día con API, el Excel de esa cuenta ya no cuenta (ni siquiera en días sin datos de la API).
+    assert list(limpio["fuente"]) == ["enable_banking"] and len(fuera) == 2
 
 
 def test_conciliacion_pp():
@@ -280,3 +281,31 @@ def test_regla_anclada_al_concepto():
                                             "subcategoria": "", "tipo_gasto": "Variable", "flujo": "Gasto", "nota": ""}])], ignore_index=True)
     m = clasificar(_raw([("REV_CONJ", "2025-09-15", "SSP", -15.15, "", "SSP")]), reg, pd.DataFrame(), CFG)
     assert m["categoria"].iloc[0] == "Restauración y delivery"
+
+
+def test_desglose_de_un_pago_unico():
+    from finanzas.modelo import aplicar_desgloses
+    raw = _raw([("REV_CONJ", "2026-11-05", "To Casero", -100.0, "", "")])
+    d = pd.DataFrame([
+        {"grupo": "Facturas", "cuenta": "REV_CONJ", "importe_pago": "100", "fecha": "20/05/2025", "concepto": "Gas", "categoria": "Suministros y telecom", "subcategoria": "Luz y gas", "importe": "-70"},
+        {"grupo": "Facturas", "cuenta": "REV_CONJ", "importe_pago": "100", "fecha": "09/06/2025", "concepto": "Agua", "categoria": "Suministros y telecom", "subcategoria": "Agua", "importe": "-35"},
+        {"grupo": "Facturas", "cuenta": "REV_CONJ", "importe_pago": "100", "fecha": "21/07/2025", "concepto": "Devolución", "categoria": "Suministros y telecom", "subcategoria": "Luz y gas", "importe": "5"}])
+    r, c, av = aplicar_desgloses(raw, d)
+    assert len(r) == 3 and abs(r["importe"].sum() + 100) < 1e-9 and sorted(r["fecha"]) == ["2025-05-20", "2025-06-09", "2025-07-21"]
+    assert set(c["subcategoria"]) == {"Luz y gas", "Agua"} and not av
+    # sin el pago, no se añade nada (y avisa)
+    r2, c2, av2 = aplicar_desgloses(_raw([("REV_CONJ", "2026-11-05", "Otro", -50.0, "", "")]), d)
+    assert len(r2) == 1 and c2.empty and av2
+    # idempotente: las líneas tienen ids estables
+    r3, _, _ = aplicar_desgloses(raw, d)
+    assert sorted(r3["tx_id"]) == sorted(r["tx_id"])
+
+
+def test_paso_de_excel_a_api_sin_duplicar():
+    from finanzas.modelo import resolver_fuentes
+    excel = _raw([("BANCO_CORR", "2026-11-02", "COMPRA TARJ. GLOVO", -20.0, "", ""),
+                  ("BANCO_CORR", "2026-10-28", "RECIBO FIBRA", -30.0, "", "")]).assign(fuente="sabadell_xls")
+    api = _raw([("BANCO_CORR", "2026-11-01", "GLOVO", -20.0, "", ""),       # la API lo fecha un día antes
+                ("BANCO_CORR", "2026-11-03", "NOMINA", 2700.0, "", "")]).assign(fuente="enable_banking")
+    limpio, fuera = resolver_fuentes(pd.concat([excel, api], ignore_index=True))
+    assert sorted(limpio["concepto"]) == ["GLOVO", "NOMINA", "RECIBO FIBRA"] and len(fuera) == 1   # el Excel solo cuenta antes del 01/11
