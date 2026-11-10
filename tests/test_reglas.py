@@ -309,3 +309,12 @@ def test_paso_de_excel_a_api_sin_duplicar():
                 ("BANCO_CORR", "2026-11-03", "NOMINA", 2700.0, "", "")]).assign(fuente="enable_banking")
     limpio, fuera = resolver_fuentes(pd.concat([excel, api], ignore_index=True))
     assert sorted(limpio["concepto"]) == ["GLOVO", "NOMINA", "RECIBO FIBRA"] and len(fuera) == 1   # el Excel solo cuenta antes del 01/11
+
+
+def test_categoria_antigua_de_alquiler_pasa_a_vivienda_alquiler():
+    from finanzas.reglas import normalizar_categorias
+    df = pd.DataFrame({"categoria": ["Vivienda: alquiler", "Vivienda: alquiler", "Seguros"],
+                       "subcategoria": ["", "Plaza de parking", ""]})
+    out = normalizar_categorias(df)
+    assert list(out["categoria"]) == ["Vivienda", "Vivienda", "Seguros"]
+    assert list(out["subcategoria"]) == ["Alquiler", "Plaza de parking", ""]  # no pisa una subcategoría ya puesta

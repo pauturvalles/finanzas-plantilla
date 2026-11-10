@@ -1,7 +1,7 @@
 categoria,plataforma,activo,nombre,cantidad,valor,coste,coste_plataforma,fecha_valor,fuente
-Fondos MyInvestor,MyInvestor,IE00BD0NCM55,iShares Developed World Index Fund (IE) D Acc EUR,341.5852,6168.72,5600.0,5600.0,2026-11-06,341.5852 participaciones × valor liquidativo
-Fondos MyInvestor,MyInvestor,IE00BYWYCC39,iShares Emerging Markets Index Fund (IE) D Acc EUR,97.3504,1541.71,1400.0,1400.0,2026-11-06,97.3504 participaciones × valor liquidativo
-Efectivo en cuentas,Cuentas,BANCO_CORR,BANCO_CORR,,4068.06,4068.06,4068.06,,api (tu parte)
+Fondos MyInvestor,MyInvestor,IE00BD0NCM55,iShares Developed World Index Fund (IE) D Acc EUR,341.5852,6168.72,5600.0,5600.0,2026-11-09,341.5852 participaciones × valor liquidativo
+Fondos MyInvestor,MyInvestor,IE00BYWYCC39,iShares Emerging Markets Index Fund (IE) D Acc EUR,97.3504,1541.71,1400.0,1400.0,2026-11-09,97.3504 participaciones × valor liquidativo
+Efectivo en cuentas,Cuentas,BANCO_CORR,BANCO_CORR,,3995.8,3995.8,3995.8,,api (tu parte)
 Efectivo en cuentas,Cuentas,TR,TR,,7787.12,7787.12,7787.12,,api (tu parte)
-Efectivo en cuentas,Cuentas,REV_CONJ,REV_CONJ,,1434.53,1434.53,1434.53,,api (tu parte)
+Efectivo en cuentas,Cuentas,REV_CONJ,REV_CONJ,,1385.63,1385.63,1385.63,,api (tu parte)
 Efectivo en cuentas,Cuentas,MYINV,MYINV,,0.0,0.0,0.0,,api (tu parte)

@@ -57,6 +57,8 @@ La **nómina** se asigna al mes que paga: si entra entre el día 1 y el 5, cuent
 - **Variable**: el resto del día a día.
 - **Extraordinario**: puntual y grande (una boda, un viaje excepcional, una obra, el pago del IRPF). No cuenta en las medias ni en el «gasto normal». Se marca con un ajuste o una regla.
 
+- **Vivienda** es una categoría general y el detalle va en la subcategoría (*Alquiler*, *Hipoteca*, *Seguro de hogar*, *IBI*, *Comunidad*…); toda ella cuenta como gasto esencial. La antigua «Vivienda: alquiler» se convierte sola en Vivienda / Alquiler.
+
 ## 8. Ingresos y margen de ahorro
 
 - **Ingresos del trabajo** = nómina neta + todo lo pagado con la retribución flexible (Coverflex) **en bruto**: es sueldo en especie; lo que consumes está en el gasto y lo que te reponen otros vuelve como dinero.
@@ -92,6 +94,8 @@ La **nómina** se asigna al mes que paga: si entra entre el día 1 y el 5, cuent
 - **Dónde ahorrar**: gasto hormiga (compras ≤ umbral, frecuentes, anualizadas); recurrentes (gasto fijo o el mismo importe en ≥ 3 meses, con su frecuencia); «¿y si…?» (ahorro y su valor invertido).
 - **Costes de inversión**: gestión + custodia + TER de `costes.yaml`, en €/año y su efecto acumulado.
 - **Proyección**: patrimonio + aportación mensual a la rentabilidad media de tu reparto, con banda de ±2 puntos y en euros de hoy.
+
+- **Comparar rentabilidades** (Inversiones): rentabilidad ponderada en el tiempo, mes a mes. Un activo, por su precio de fin de mes; una plataforma o cartera, como la media de sus activos ponderada por su valor a final del mes anterior. No la mueven tus aportaciones (la TIR de la tabla de rentabilidad sí). Un «*» marca precios aproximados.
 
 ## 13. Tus decisiones
 

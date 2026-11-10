@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from . import fiscal, patrimonio, reglas
+from . import fiscal, patrimonio, reglas, rentabilidad
 from .fuentes import (coverflex, enable_banking, indexa, kraken, myinvestor, revolut_csv, revolutx, sabadell, trade_republic,
                       trade_republic_csv, valores_liquidativos)
 from .modelo import COLUMNAS_MOV, COLUMNAS_RAW, aplicar_desgloses, asignar_ids, posibles_duplicados, resolver_fuentes, upsert, vacio_raw
@@ -46,7 +46,7 @@ def _historico(cfg: dict) -> pd.DataFrame:
     h = h.assign(tx_id="hist-" + h["id"].astype(str), cuenta=h["cuenta"].map(lambda n: ids.get(n, n)),
                  contraparte="", iban_contraparte="", moneda="EUR", tipo_origen="", fuente="historico",
                  regla="historico")
-    return h[COLUMNAS_MOV]
+    return reglas.normalizar_categorias(h[COLUMNAS_MOV])
 
 
 def ejecutar(sin_bancos: bool = False) -> None:
@@ -358,6 +358,14 @@ def ejecutar(sin_bancos: bool = False) -> None:
         anotar("Patrimonio por categoría", "ok", len(cat_df))
     except Exception as e:
         anotar("Patrimonio por categoría", "error", detalle=f"{type(e).__name__}: {e}")
+    # Series mensuales para comparar rentabilidades: precio de cada activo y lo que valía cada uno (una foto por mes).
+    try:
+        precios_hoy, valores_hoy = rentabilidad.foto_mensual(det_df, ahora[:10])
+        hoja.escribir("precios_historicos", rentabilidad.actualizar_mes(hoja.leer("precios_historicos"), precios_hoy, "fecha", ["activo"]))
+        hoja.escribir("patrimonio_historico_activos", rentabilidad.sustituir_mes(hoja.leer("patrimonio_historico_activos"), valores_hoy, "mes"))
+        anotar("Series de rentabilidad", "ok", len(precios_hoy))
+    except Exception as e:
+        anotar("Series de rentabilidad", "error", detalle=f"{type(e).__name__}: {e}")
     pat = pd.DataFrame(pos).drop_duplicates(["plataforma", "producto"], keep="first") if pos else pd.DataFrame()
     if not pat.empty:
         pat.insert(0, "fecha", ahora[:10])

@@ -213,6 +213,17 @@ for a, m in meses():
     fo = sum(sum(x[1] for x in participaciones[i] if x[0] <= fin_m) * precios[i][(a, m)] for i in FONDOS)
     rec += [{"mes": fin_m.isoformat(), "categoria": "Efectivo en cuentas", "valor": round(ef, 2)},
             {"mes": fin_m.isoformat(), "categoria": "Fondos MyInvestor", "valor": round(fo, 2)}]
+# Series para comparar rentabilidades: precio de cada fondo y lo que valía cada uno a fin de mes.
+filas_p, filas_v = [], []
+for a, m in meses():
+    fin_m = min(dia(a, m, 31), FIN)
+    hoy_mes = fin_m.replace(day=1) == FIN.replace(day=1)
+    for isin in FONDOS:
+        pr = precios[isin]["hoy"] if hoy_mes else precios[isin][(a, m)]
+        filas_p.append({"activo": isin, "fecha": fin_m.isoformat(), "precio": pr, "fuente": "demo"})
+        q = sum(x[1] for x in participaciones[isin] if x[0] <= fin_m)
+        if q > 0:
+            filas_v.append({"mes": fin_m.isoformat(), "categoria": "Fondos MyInvestor", "activo": isin, "cantidad": round(q, 4), "valor": round(q * pr, 2)})
 hist = pd.concat([cats.assign(fecha=(FIN - timedelta(days=d)).isoformat(),
                               valor=cats["valor"] * (1 - 0.002 * d)) for d in range(min(5, FIN.day - 1), -1, -1)], ignore_index=True)
 
@@ -230,6 +241,7 @@ salida = {
     "saldos": saldos, "patrimonio": pat, "patrimonio_detalle": det, "patrimonio_categorias": cats,
     "patrimonio_categorias_historico": hist, "patrimonio_historico_reconstruido": pd.DataFrame(rec),
     "presupuestos": presupuestos, "registro": registro,
+    "precios_historicos": pd.DataFrame(filas_p), "patrimonio_historico_activos": pd.DataFrame(filas_v),
 }
 (DEMO / "datos").mkdir(exist_ok=True)
 for nombre, df in salida.items():

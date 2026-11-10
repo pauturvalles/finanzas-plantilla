@@ -29,6 +29,7 @@ Con eso: rellena `config/cuentas.yaml`, decide qué fuentes conectar por Enable 
 | `src/finanzas/patrimonio.py` | Valoraciones, categorías, costes fiscales, conciliación |
 | `src/finanzas/fiscal.py` | FIFO de cripto, escala del ahorro, simulador de venta |
 | `src/finanzas/historico.py` | Reconstrucción del patrimonio mes a mes |
+| `src/finanzas/rentabilidad.py` | Rentabilidad mes a mes (ponderada en el tiempo) de activos, plataformas y carteras |
 | `src/finanzas/sheets.py` | Google Sheets/Drive; `a_numero()` para números en español |
 | `src/finanzas/fuentes/` | Un lector por fuente |
 | `dashboard/app.py` | Dashboard (D3 incluido en `dashboard/vendor/`) |

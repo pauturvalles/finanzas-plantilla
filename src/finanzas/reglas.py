@@ -13,10 +13,31 @@ import pandas as pd
 from .modelo import COLUMNAS_MOV
 
 ESENCIAL = {
-    "Vivienda: alquiler", "Suministros y telecom", "Supermercado y alimentación", "Seguros",
+    "Vivienda", "Suministros y telecom", "Supermercado y alimentación", "Seguros",
     "Salud y cuidado personal", "Transporte", "Impuestos y trámites", "Comisiones bancarias",
     "Hogar: equipamiento y mantenimiento", "Efectivo",
 }
+# Categorías antiguas → (categoría, subcategoría). Se aplican a todo (reglas de la hoja, ajustes e histórico),
+# así que no hace falta reescribir nada en la hoja ni en los ficheros revisados.
+CATEGORIAS_RENOMBRADAS = {"Vivienda: alquiler": ("Vivienda", "Alquiler")}
+
+
+def normalizar_categorias(df: pd.DataFrame) -> pd.DataFrame:
+    """Pasa las categorías antiguas a la nueva forma; la subcategoría solo se rellena si estaba vacía."""
+    if df.empty or "categoria" not in df.columns:
+        return df
+    df = df.copy()
+    for vieja, (cat, sub) in CATEGORIAS_RENOMBRADAS.items():
+        m = df["categoria"].astype(str).eq(vieja)
+        if not m.any():
+            continue
+        df.loc[m, "categoria"] = cat
+        if "subcategoria" in df.columns:
+            vacia = m & df["subcategoria"].fillna("").astype(str).str.strip().isin(["", "nan"])
+            df.loc[vacia, "subcategoria"] = sub
+    return df
+
+
 SIN_DETALLE = "Compartido: reposiciones (sin detalle)"  # valor por defecto; ver nombres()
 
 
@@ -191,6 +212,7 @@ def clasificar(raw: pd.DataFrame, reglas: pd.DataFrame, ajustes: pd.DataFrame, c
                 df.loc[m, "pct_imputado"] = float(str(a["pct_imputado"]).replace(",", "."))
             df.loc[m, "regla"] = "ajuste_manual"
 
+    df = normalizar_categorias(df)
     df["naturaleza"] = ""
     g = df["flujo"].eq("Gasto")
     df.loc[g, "naturaleza"] = df.loc[g, "categoria"].map(lambda c: "Esencial" if c in ESENCIAL else "Discrecional")

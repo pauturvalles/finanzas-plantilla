@@ -1,7 +1,7 @@
 fecha,plataforma,producto,referencia,activo,cantidad,valor,aportado,coste_fiscal,fecha_valor,metodo
-2026-11-06,MyInvestor,iShares Developed World Index Fund (IE) D Acc EUR,IE00BD0NCM55,IE00BD0NCM55,341.5852,6168.72,5600.0,5600.0,2026-11-06,341.5852 participaciones × valor liquidativo
-2026-11-06,MyInvestor,iShares Emerging Markets Index Fund (IE) D Acc EUR,IE00BYWYCC39,IE00BYWYCC39,97.3504,1541.71,1400.0,1400.0,2026-11-06,97.3504 participaciones × valor liquidativo
-2026-11-06,Cuentas,BANCO_CORR,CLBD,,,4068.06,,,,api (tu parte)
-2026-11-06,Cuentas,TR,CLBD,,,7787.12,,,,api (tu parte)
-2026-11-06,Cuentas,REV_CONJ,CLBD,,,1434.53,,,,api (tu parte)
-2026-11-06,Cuentas,MYINV,CLBD,,,0.0,,,,api (tu parte)
+2026-11-09,MyInvestor,iShares Developed World Index Fund (IE) D Acc EUR,IE00BD0NCM55,IE00BD0NCM55,341.5852,6168.72,5600.0,5600.0,2026-11-09,341.5852 participaciones × valor liquidativo
+2026-11-09,MyInvestor,iShares Emerging Markets Index Fund (IE) D Acc EUR,IE00BYWYCC39,IE00BYWYCC39,97.3504,1541.71,1400.0,1400.0,2026-11-09,97.3504 participaciones × valor liquidativo
+2026-11-09,Cuentas,BANCO_CORR,CLBD,,,3995.8,,,,api (tu parte)
+2026-11-09,Cuentas,TR,CLBD,,,7787.12,,,,api (tu parte)
+2026-11-09,Cuentas,REV_CONJ,CLBD,,,1385.63,,,,api (tu parte)
+2026-11-09,Cuentas,MYINV,CLBD,,,0.0,,,,api (tu parte)

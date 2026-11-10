@@ -10,7 +10,9 @@ En la carpeta (fuera del repo):
   - CSV de Revolut: el de la conjunta con «conjunta» en el nombre (cuenta al 50 %);
   - Excel del Sabadell (las dos cuentas);
   - CSV de transacciones de Trade Republic.
-Lee de la hoja: pp_operaciones, patrimonio_detalle (cantidades de hoy) y saldos.
+Lee de la hoja: pp_operaciones, patrimonio_detalle (cantidades de hoy), saldos y valores_liquidativos.
+Sube: patrimonio_historico_reconstruido (por categoría) y, para comparar rentabilidades, precios_historicos
+(precio de cada activo a fin de mes) y patrimonio_historico_activos (lo que valía cada activo).
 """
 import argparse
 import os
@@ -51,6 +53,7 @@ tr = [b for b in csvs.values() if TRC.es_export(b)]
 revolut = {f: b for f, b in csvs.items() if b[:40].decode("utf-8-sig", "ignore").startswith("Tipo,Producto")}
 sabadell = [f.read_bytes() for f in list(carpeta.glob("*.xls")) + list(carpeta.glob("*.xlsx"))]
 precios = H.leer_precios_pp(carpeta)
+fuente_precio = {k: "Portfolio Performance" for k in precios}
 
 inicio = min([pd.to_datetime(ops["fecha"]).min()] + [pd.Timestamp("2100-01-01")])
 meses = pd.date_range(inicio.to_period("M").to_timestamp("M"), pd.Timestamp.today().to_period("M").to_timestamp("M"), freq="ME")
@@ -95,6 +98,7 @@ if tr:
                 u_ = vls_hoja[vls_hoja["isin"] == isin].assign(f=lambda d: pd.to_datetime(d["fecha"], format="mixed", dayfirst=True)).sort_values("f").iloc[-1]
                 hoy_p = float(a_numero(pd.Series([u_["vl"]])).iloc[0])
             precios[isin] = H.completar_con_precio_actual(p, hoy_p, pd.Timestamp.today())
+            fuente_precio[isin] = "compras interpoladas (aproximado)"
             print(f"Precios de {isin}: tus compras" + (" + precio de hoy, interpolados" if hoy_p else " (sin precio de hoy)"))
 
 # --- precios de cripto (Binance, público)
@@ -102,7 +106,21 @@ for activo in sorted(set(part.loc[part["categoria"] == "Cripto", "activo"]) - {"
     s = H.precios_binance(activo, meses[0] - pd.Timedelta(days=40))
     if len(s):
         precios[activo] = s
+        fuente_precio[activo] = "Binance"
         print(f"Precios de {activo}: Binance ({s.index.min():%Y-%m} → {s.index.max():%Y-%m})")
+
+# --- valores liquidativos guardados en la hoja (fondos): alargan la serie de PP más allá de su última fecha
+if not vls_hoja.empty:
+    v_ = vls_hoja.assign(f=pd.to_datetime(vls_hoja["fecha"], format="mixed", dayfirst=True, errors="coerce"),
+                         p=a_numero(vls_hoja["vl"])).dropna(subset=["f", "p"])
+    for isin, g in v_.groupby("isin"):
+        s_ = g.set_index("f")["p"].sort_index()
+        s_ = s_[~s_.index.duplicated(keep="last")]
+        if isin in precios and len(precios[isin]):
+            s_ = pd.concat([precios[isin], s_[s_.index > precios[isin].index.max()]])
+        else:
+            fuente_precio[isin] = "valores liquidativos"
+        precios[isin] = s_
 
 # --- valor de cada activo a fin de mes
 part = part[part["cantidad"].abs() > 1e-9]
@@ -159,6 +177,28 @@ print("\nFin de año:")
 print(tabla[tabla.index.str[5:7] == "12"].assign(TOTAL=lambda t: t.sum(axis=1)).round(0).to_string())
 print("\nÚltimo mes:")
 print(tabla.tail(1).T.round(0).to_string())
+# --- series para comparar rentabilidades: precio de cada activo a fin de mes y lo que valía cada uno
+from finanzas import rentabilidad as RT  # noqa: E402
+filas_p = []
+for activo in sorted(set(part["activo"]) - {"EUR"}):
+    s_ = precios.get(activo)
+    if s_ is None or s_.empty:
+        continue
+    for mes in meses:
+        if mes + pd.Timedelta(hours=23) < s_.index.min():
+            continue  # antes de su primer precio no hay rentabilidad que calcular
+        filas_p.append({"activo": activo, "fecha": mes.strftime("%Y-%m-%d"), "precio": round(precio(activo, mes), 6),
+                        "fuente": fuente_precio.get(activo, "")})
+precios_m = pd.DataFrame(filas_p)
+valores_m = part[(part["activo"] != "EUR") & part["valor"].notna()].assign(mes=lambda d: d["mes"].dt.strftime("%Y-%m-%d"))
+valores_m = valores_m[["mes", "categoria", "activo", "cantidad", "valor"]].round({"valor": 2})
+print(f"\nSeries de rentabilidad: {precios_m['activo'].nunique() if len(precios_m) else 0} activos con precio, {len(valores_m)} filas de posiciones.")
+aprox = sorted(k for k, v in fuente_precio.items() if v.startswith("compras") and k in set(precios_m.get("activo", [])))
+if aprox:
+    print("   Con precio aproximado (sus compras interpoladas; la rentabilidad mes a mes no es real):", ", ".join(aprox))
+
 if not a.sin_subir:
     hoja.escribir("patrimonio_historico_reconstruido", res)
-    print("\nSubido a la pestaña patrimonio_historico_reconstruido.")
+    hoja.escribir("precios_historicos", RT.actualizar_mes(hoja.leer("precios_historicos"), precios_m, "fecha", ["activo"]))
+    hoja.escribir("patrimonio_historico_activos", RT.sustituir_mes(hoja.leer("patrimonio_historico_activos"), valores_m, "mes"))
+    print("\nSubido a patrimonio_historico_reconstruido, precios_historicos y patrimonio_historico_activos.")

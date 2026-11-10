@@ -1,3 +1,3 @@
 tx_id,cuenta,fecha,concepto,contraparte,iban_contraparte,importe,moneda,tipo_origen,fuente
-730e418bc9063344,BANCO_CORR,2026-10-31,AMAZON.ES COMPRA,,,-34.99,EUR,,enable_banking
-46da8ae8b2e2425c,BANCO_CORR,2026-10-31,AMAZON.ES COMPRA,,,-34.99,EUR,,fichero
+15e4ca6a735b71fc,BANCO_CORR,2026-11-03,AMAZON.ES COMPRA,,,-34.99,EUR,,enable_banking
+aa1b6b8e20caa349,BANCO_CORR,2026-11-03,AMAZON.ES COMPRA,,,-34.99,EUR,,fichero

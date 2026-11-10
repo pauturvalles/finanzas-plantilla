@@ -13,7 +13,7 @@ prioridad,patron,cuenta,categoria,subcategoria,tipo_gasto,flujo,nota
 6,COFFEE|CAFETERIA|CAFE ,,Restauración y delivery,"Cafés, desayunos y brunch",Variable,Gasto,
 6,VINTED,,Ropa y calzado,Segunda mano (Vinted),Variable,Gasto,
 6,STEAM|ENEBA|INSTANT GAMING|PLAYSTATION|NINTENDO|XBOX,,Videojuegos y ocio digital,,Variable,Gasto,
-10,ALQUILER|ARRENDAMIENTO,,Vivienda: alquiler,,Fijo,Gasto,
+10,ALQUILER|ARRENDAMIENTO,,Vivienda,Alquiler,Fijo,Gasto,
 20,FIBRA|MOVISTAR|VODAFONE|ORANGE|DIGI|O2 ,,Suministros y telecom,,Fijo,Gasto,
 20,ENDESA|IBERDROLA|NATURGY|AIGUES|CANAL DE ISABEL,,Suministros y telecom,,Fijo,Gasto,
 40,SEGURO|MAPFRE|MUTUA|SANITAS|ADESLAS,,Seguros,,Fijo,Gasto,
