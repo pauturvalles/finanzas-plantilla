@@ -26,6 +26,13 @@ from google.oauth2.service_account import Credentials
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+# Streamlit solo recarga el código de la carpeta del dashboard: si cambia algo de src/finanzas (p. ej. tras un push),
+# el proceso seguiría usando la versión vieja ya importada. Si cambió algún fichero, se vuelven a importar.
+_firma = tuple(sorted((str(f), f.stat().st_mtime) for f in (Path(__file__).resolve().parents[1] / "src" / "finanzas").rglob("*.py")))
+if getattr(sys, "_finanzas_firma", None) != _firma:
+    for _m in [m for m in sys.modules if m == "finanzas" or m.startswith("finanzas.")]:
+        del sys.modules[_m]
+    sys._finanzas_firma = _firma
 from finanzas.fiscal import cuota_ahorro, simular_venta  # noqa: E402
 from finanzas.reglas import normalizar_categorias  # noqa: E402
 from finanzas import rentabilidad as RENT  # noqa: E402
