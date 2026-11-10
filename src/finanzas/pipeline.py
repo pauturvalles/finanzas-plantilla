@@ -236,6 +236,13 @@ def ejecutar(sin_bancos: bool = False) -> None:
                     p_["coste_fiscal"] = round(coste_cta[p_["producto"]], 2) if p_["producto"] != "Plan de pensiones" else None
         except Exception as e:
             anotar("Indexa (detalle)", "error", detalle=f"{type(e).__name__}: {e}")
+        try:  # su propia rentabilidad mes a mes (la de su web), para el comparador del dashboard
+            rent_ix = pd.DataFrame(indexa.rentabilidad_mensual())
+            if not rent_ix.empty:
+                hoja.escribir("indexa_rentabilidad", rent_ix)
+            anotar("Indexa (rentabilidad)", "ok", len(rent_ix))
+        except Exception as e:
+            anotar("Indexa (rentabilidad)", "error", detalle=f"{type(e).__name__}: {e}")
     ops_cripto = hoja.leer("cripto_operaciones")
     nuevas_ops: list[pd.DataFrame] = []
     # Kraken: ledger (operaciones y staking); necesita el permiso «Query Ledger Entries».

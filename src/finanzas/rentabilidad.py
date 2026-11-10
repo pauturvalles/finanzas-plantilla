@@ -156,3 +156,26 @@ def foto_mensual(det: pd.DataFrame, fecha: str) -> tuple[pd.DataFrame, pd.DataFr
     v.insert(0, "mes", fecha)
     v["valor"] = v["valor"].round(2)
     return precios, v
+
+
+def con_indice_oficial(precios: pd.DataFrame, valores: pd.DataFrame, indices: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Sustituye, para cada categoría con índice oficial (p. ej. Indexa: `indexa_rentabilidad`), sus fondos por un
+    único activo «<categoría> (oficial)» cuyo precio es ese índice y cuyo valor es la suma de la categoría.
+    Así la categoría y todo lo que la incluye («Todo lo invertido»…) usan la rentabilidad oficial, con sus comisiones
+    y su efectivo. Solo desde el primer mes con índice; los fondos sueltos siguen comparables por su precio."""
+    if indices.empty or valores.empty:
+        return precios, valores
+    ind = indices.assign(indice=pd.to_numeric(indices["indice"], errors="coerce")).dropna(subset=["indice"])
+    p_extra, v = [], valores.copy()
+    v["_mes"] = _fin_de_mes(v["mes"])
+    for cat, g in ind.groupby("categoria"):
+        nombre = f"{cat} (oficial)"
+        p_extra.append(pd.DataFrame({"activo": nombre, "fecha": g["fecha"], "precio": g["indice"], "fuente": "oficial"}))
+        desde = _fin_de_mes(g["fecha"]).min()
+        m = (v["categoria"] == cat) & (v["_mes"] >= desde)
+        if not m.any():
+            continue
+        suma = v[m].groupby("_mes", as_index=False)["valor"].sum()
+        nuevas = pd.DataFrame({"mes": suma["_mes"].dt.strftime("%Y-%m-%d"), "categoria": cat, "activo": nombre, "valor": suma["valor"], "_mes": suma["_mes"]})
+        v = pd.concat([v[~m], nuevas], ignore_index=True)
+    return pd.concat([precios, *p_extra], ignore_index=True), v.drop(columns="_mes")

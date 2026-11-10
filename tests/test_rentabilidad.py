@@ -75,3 +75,19 @@ def test_foto_mensual_y_sustituir_mes():
     viejo = pd.DataFrame({"mes": ["2026-10-31", "2026-11-03"], "categoria": ["Cripto", "Cripto"], "activo": ["ETH", "ETH"], "cantidad": [1, 1], "valor": [3000, 3100]})
     out = R.sustituir_mes(viejo, v, "mes")
     assert len(out) == 4 and not ((out["activo"] == "ETH") & (out["mes"] == "2026-11-03")).any()  # ETH vendido en noviembre
+
+
+def test_indice_oficial_sustituye_a_los_fondos_de_su_categoria():
+    precios = pd.DataFrame({"activo": ["F1", "F1", "F1", "M", "M", "M"],
+                            "fecha": ["2026-01-31", "2026-02-28", "2026-03-31"] * 2, "precio": [10, 11, 12, 100, 101, 102.01]})
+    valores = pd.DataFrame({"mes": ["2026-01-31", "2026-02-28"] * 2, "categoria": ["Fondos Indexa"] * 2 + ["Fondos MyInvestor"] * 2,
+                            "activo": ["F1", "F1", "M", "M"], "valor": [1000, 1100, 1000, 1010]})
+    indices = pd.DataFrame({"categoria": ["Fondos Indexa"] * 3, "fecha": ["2026-01-30", "2026-02-27", "2026-03-31"], "indice": [1.0, 1.05, 1.071]})
+    p2, v2 = R.con_indice_oficial(precios, valores, indices)
+    r = R.rent_activos(p2)
+    g = R.rent_grupo(v2[v2["categoria"] == "Fondos Indexa"], r)
+    assert g.loc["2026-02-28"] == pytest.approx(0.05)  # el índice de Indexa, no el +10 % del fondo
+    assert g.loc["2026-03-31"] == pytest.approx(0.02)
+    assert r.loc["2026-02-28", "F1"] == pytest.approx(0.10)  # el fondo suelto sigue disponible
+    total = R.rent_grupo(v2, r)
+    assert total.loc["2026-03-31"] == pytest.approx((1100 * 0.02 + 1010 * 0.01) / 2110)

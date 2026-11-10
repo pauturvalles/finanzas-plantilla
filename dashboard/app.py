@@ -1674,6 +1674,8 @@ with T["inversiones"]:
                     "`scripts/reconstruir_historico.py` (sube los precios y las posiciones de cada mes desde 2020).")
         else:
             ph["precio"], va["valor"] = num(ph["precio"]), num(va["valor"])
+            oficial = pestana("indexa_rentabilidad")
+            ph, va = RENT.con_indice_oficial(ph, va, oficial)  # Indexa: su propia rentabilidad (neta de comisiones), como en su web
             r_act = RENT.rent_activos(ph)
             det_n = pestana("patrimonio_detalle")
             nombres_a = dict(zip(det_n["activo"], det_n["nombre"])) if not det_n.empty and "nombre" in det_n.columns else {}
@@ -1698,7 +1700,7 @@ with T["inversiones"]:
             n_carteras = len(series)
             vistos = set()
             for a_ in sorted(r_act.columns, key=lambda x: str(nombres_a.get(x, x))):
-                if r_act[a_].notna().sum() < 1:
+                if r_act[a_].notna().sum() < 1 or str(a_).endswith(" (oficial)"):
                     continue
                 etiqueta = f"{nombres_a.get(a_) or a_} ({a_})" if nombres_a.get(a_) and nombres_a.get(a_) != a_ else str(a_)
                 etiqueta += " *" if a_ in aprox else ""
@@ -1745,7 +1747,9 @@ with T["inversiones"]:
                         "Peor caída": st.column_config.NumberColumn(format="percent", help="La mayor bajada desde un máximo hasta el mínimo siguiente, dentro del periodo."),
                         "Mejor mes": st.column_config.NumberColumn(format="percent"), "Peor mes": st.column_config.NumberColumn(format="percent")})
                 st.caption("Con datos de fin de mes. Los traspasos y las aportaciones no cuentan como rentabilidad. Un activo que entra en la cartera "
-                           "a mitad de periodo empieza a contar en su primer mes completo.")
+                           "a mitad de periodo empieza a contar en su primer mes completo."
+                           + (" Las cuentas de Indexa usan la rentabilidad que publica Indexa (neta de sus comisiones y con su efectivo); "
+                              "sus fondos sueltos, el precio de cada uno." if not oficial.empty else ""))
 
             # Mes a mes, como la vista de Indexa.
             st.markdown("**Mes a mes**")
@@ -1755,7 +1759,12 @@ with T["inversiones"]:
                 z = tab_m.values.astype(float)
                 texto = [[("" if np.isnan(v_) else f"{v_ * 100:+.1f}".replace(".", ",")) for v_ in fila] for fila in z]
                 fig = go.Figure(go.Heatmap(z=z, x=list(tab_m.columns), y=[str(a_) for a_ in tab_m.index], text=texto, texttemplate="%{text}",
-                                           colorscale=[[0, C["rojo"]], [0.5, "rgba(140,149,163,0.18)"], [1, C["verde"]]], zmid=0, zmin=-0.08, zmax=0.08,
+                                           # Colores suaves y el número siempre en el color del texto, para que se lea en las dos apariencias.
+                                           # Rojo o verde claros desde pocas décimas; ±1 % ya se nota y ±3 % es intenso (escala de −6 % a +6 %).
+                                           colorscale=[[0, "rgba(220,95,95,0.90)"], [0.25, "rgba(220,95,95,0.70)"], [0.417, "rgba(220,95,95,0.45)"],
+                                                       [0.49, "rgba(220,95,95,0.22)"], [0.5, "rgba(140,149,163,0.08)"], [0.51, "rgba(70,170,105,0.22)"],
+                                                       [0.583, "rgba(70,170,105,0.45)"], [0.75, "rgba(70,170,105,0.70)"], [1, "rgba(70,170,105,0.90)"]],
+                                           zmid=0, zmin=-0.06, zmax=0.06, textfont=dict(color=TXT, size=12),
                                            showscale=False, xgap=2, ygap=2, hovertemplate="%{y} %{x}: %{z:.2%}<extra></extra>"))
                 fig.update_layout(height=60 + 34 * len(tab_m), margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)",
                                   plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Inter, sans-serif", size=12, color=TXT))

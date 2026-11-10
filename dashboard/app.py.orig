@@ -28,6 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from finanzas.fiscal import cuota_ahorro, simular_venta  # noqa: E402
 from finanzas.reglas import normalizar_categorias  # noqa: E402
+from finanzas import rentabilidad as RENT  # noqa: E402
 
 st.set_page_config(page_title="Finanzas personales", page_icon="💶", layout="wide")
 
@@ -1660,6 +1661,114 @@ with T["inversiones"]:
                                                                 "(un traspaso de entrada cuenta como compra a su valor de ese día).")})
             st.caption("Cuál mirar: la **rentabilidad total** dice cuánto has ganado sobre lo que pusiste; la **TIR anual** dice a qué ritmo por año, "
                        "contando cuándo entró cada euro (es la comparable con un depósito o con otra inversión).")
+
+        # ---------- Comparar rentabilidades (y mes a mes, como en Indexa)
+        st.subheader("Comparar rentabilidades", help="Rentabilidad «ponderada en el tiempo»: la de cada activo según su precio y, en plataformas y carteras, "
+                     "la media de sus activos ponderada por lo que valía cada uno a final del mes anterior. No la mueven tus aportaciones ni tus "
+                     "reembolsos (es como la publican los fondos e Indexa), así que sirve para comparar unas con otras. Cuánto has ganado tú, con tus "
+                     "aportaciones y sus fechas, es la TIR de la tabla de arriba.")
+        ph = pestana("precios_historicos").copy()
+        va = pestana("patrimonio_historico_activos").copy()
+        if ph.empty or va.empty:
+            st.info("Aún no hay series para comparar. El pipeline las alarga solo cada mes; para rellenar el pasado, ejecuta una vez "
+                    "`scripts/reconstruir_historico.py` (sube los precios y las posiciones de cada mes desde 2020).")
+        else:
+            ph["precio"], va["valor"] = num(ph["precio"]), num(va["valor"])
+            oficial = pestana("indexa_rentabilidad")
+            ph, va = RENT.con_indice_oficial(ph, va, oficial)  # Indexa: su propia rentabilidad (neta de comisiones), como en su web
+            r_act = RENT.rent_activos(ph)
+            det_n = pestana("patrimonio_detalle")
+            nombres_a = dict(zip(det_n["activo"], det_n["nombre"])) if not det_n.empty and "nombre" in det_n.columns else {}
+            if not ops_r_todas.empty and "nombre" in ops_r_todas.columns:
+                alias_ = (_cuentas_cfg().get("inversion", {}) or {}).get("alias_activos") or {}
+                for a_, n_ in zip(ops_r_todas["activo"].replace(alias_), ops_r_todas["nombre"]):
+                    nombres_a.setdefault(a_, n_)
+            aprox = set(ph.loc[ph.get("fuente", pd.Series("", index=ph.index)).astype(str).str.startswith("compras"), "activo"])
+            series: dict[str, pd.Series] = {}
+
+            def _grupo(nombre_g: str, mask) -> None:
+                s_ = RENT.rent_grupo(va[mask], r_act)
+                if s_.notna().sum() >= 1:
+                    series[nombre_g] = s_
+            cats_va = sorted(va["categoria"].dropna().unique())
+            _grupo("Todo lo invertido", va["categoria"].notna())
+            fondos_c = [c_ for c_ in cats_va if c_.startswith("Fondos")]
+            if len(fondos_c) > 1:
+                _grupo("Fondos indexados (todas las plataformas)", va["categoria"].isin(fondos_c))
+            for c_ in cats_va:
+                _grupo(c_, va["categoria"] == c_)
+            n_carteras = len(series)
+            vistos = set()
+            for a_ in sorted(r_act.columns, key=lambda x: str(nombres_a.get(x, x))):
+                if r_act[a_].notna().sum() < 1 or str(a_).endswith(" (oficial)"):
+                    continue
+                etiqueta = f"{nombres_a.get(a_) or a_} ({a_})" if nombres_a.get(a_) and nombres_a.get(a_) != a_ else str(a_)
+                etiqueta += " *" if a_ in aprox else ""
+                if etiqueta not in vistos:
+                    vistos.add(etiqueta)
+                    series[etiqueta] = r_act[a_]
+            opciones = list(series)
+            por_defecto = [o for o in ["Todo lo invertido", "Fondos Indexa", "Fondos MyInvestor"] if o in series] or opciones[:2]
+            elegidas = st.multiselect("Qué comparar", opciones, default=por_defecto, key="cmp_series",
+                                      help=f"Las {n_carteras} primeras son plataformas o carteras; después, cada activo. "
+                                           "«*»: precio aproximado (sus compras interpoladas), su rentabilidad mes a mes no es real.")
+            periodo = st.segmented_control("Periodo", ["Este año", "1 año", "3 años", "5 años", "Todo"], default="3 años", key="cmp_periodo",
+                                           label_visibility="collapsed") or "Todo"
+            if elegidas:
+                fin_s = max(series[e_].last_valid_index() for e_ in elegidas)
+                desde = {"Este año": pd.Timestamp(year=fin_s.year, month=1, day=31),
+                         "1 año": fin_s - pd.offsets.MonthEnd(11), "3 años": fin_s - pd.offsets.MonthEnd(35),
+                         "5 años": fin_s - pd.offsets.MonthEnd(59), "Todo": None}[periodo]
+                fig = go.Figure()
+                filas_m = []
+                for i_, e_ in enumerate(elegidas):
+                    r_ = RENT.recortar(series[e_], desde)
+                    if r_.dropna().empty:
+                        continue
+                    ac = RENT.acumulada(r_.fillna(0))
+                    fig.add_scatter(x=ac.index, y=ac.values, name=e_, mode="lines", line=dict(width=2.2, color=PALETA[i_ % len(PALETA)]),
+                                    hovertemplate="%{y:.1%}")
+                    filas_m.append({"Serie": e_, **RENT.metricas(r_)})
+                estilo(fig, 380)
+                fig.update_yaxes(tickformat=".0%", ticksuffix="")
+                if fig.data:  # meses en castellano en el eje
+                    xs = pd.DatetimeIndex(sorted({x_ for tr_ in fig.data for x_ in pd.to_datetime(tr_.x)}))
+                    paso = max(1, len(xs) // 6)
+                    marcas = xs[::paso]
+                    fig.update_xaxes(tickvals=marcas, ticktext=[f"{RENT.MESES_ES[d_.month - 1]} {d_.year}" for d_ in marcas])
+                fig.add_hline(y=0, line_color=LINEA, line_width=1)
+                st.plotly_chart(fig, width="stretch", key="cmp_fig")
+                if filas_m:
+                    orden_m = ["Serie", "Rentabilidad", "Anualizada", "Peor caída", "Volatilidad anual", "Mejor mes", "Peor mes", "Desde", "Meses"]
+                    st.dataframe(pd.DataFrame(filas_m).reindex(columns=orden_m), hide_index=True, width="stretch", column_config={
+                        "Rentabilidad": st.column_config.NumberColumn("Rentabilidad del periodo", format="percent"),
+                        "Anualizada": st.column_config.NumberColumn(format="percent", help="Solo con 12 meses o más."),
+                        "Volatilidad anual": st.column_config.NumberColumn(format="percent", help="Cuánto se mueve: desviación típica de los meses × √12."),
+                        "Peor caída": st.column_config.NumberColumn(format="percent", help="La mayor bajada desde un máximo hasta el mínimo siguiente, dentro del periodo."),
+                        "Mejor mes": st.column_config.NumberColumn(format="percent"), "Peor mes": st.column_config.NumberColumn(format="percent")})
+                st.caption("Con datos de fin de mes. Los traspasos y las aportaciones no cuentan como rentabilidad. Un activo que entra en la cartera "
+                           "a mitad de periodo empieza a contar en su primer mes completo."
+                           + (" Las cuentas de Indexa usan la rentabilidad que publica Indexa (neta de sus comisiones y con su efectivo); "
+                              "sus fondos sueltos, el precio de cada uno." if not oficial.empty else ""))
+
+            # Mes a mes, como la vista de Indexa.
+            st.markdown("**Mes a mes**")
+            una = st.selectbox("Serie", opciones, index=opciones.index(elegidas[0]) if elegidas else 0, key="cmp_mes_a_mes", label_visibility="collapsed")
+            tab_m = RENT.tabla_mes_a_mes(RENT.recortar(series[una]))
+            if not tab_m.empty:
+                z = tab_m.values.astype(float)
+                texto = [[("" if np.isnan(v_) else f"{v_ * 100:+.1f}".replace(".", ",")) for v_ in fila] for fila in z]
+                fig = go.Figure(go.Heatmap(z=z, x=list(tab_m.columns), y=[str(a_) for a_ in tab_m.index], text=texto, texttemplate="%{text}",
+                                           # Colores suaves y el número siempre en el color del texto, para que se lea en las dos apariencias.
+                                           colorscale=[[0, "rgba(194,124,136,0.55)"], [0.5, "rgba(140,149,163,0.08)"], [1, "rgba(127,174,142,0.55)"]],
+                                           zmid=0, zmin=-0.10, zmax=0.10, textfont=dict(color=TXT, size=12),
+                                           showscale=False, xgap=2, ygap=2, hovertemplate="%{y} %{x}: %{z:.2%}<extra></extra>"))
+                fig.update_layout(height=60 + 34 * len(tab_m), margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)",
+                                  plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Inter, sans-serif", size=12, color=TXT))
+                fig.update_xaxes(side="top", showgrid=False)
+                fig.update_yaxes(autorange="reversed", showgrid=False, type="category")
+                st.plotly_chart(fig, width="stretch", key="cmp_heat")
+                st.caption("En %. La última columna es la rentabilidad de cada año (los meses encadenados); el año en curso, hasta el último mes con datos.")
 
         # ---------- 1. Lo que te cuestan tus inversiones
         st.caption(f"Comisiones y TER de `config/costes.yaml`, revisados el {cfg_c.get('revisado', '?')}. Compruébalos de vez en cuando en cada entidad.")

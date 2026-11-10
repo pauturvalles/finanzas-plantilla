@@ -10,6 +10,7 @@ import json
 import os
 import sys
 
+import pandas as pd
 import requests
 
 API = "https://api.indexacapital.com"
@@ -65,6 +66,25 @@ def posiciones_detalle() -> list[dict]:
                     "cantidad": float(p.get("titles") or 0), "valor": float(p.get("amount") or 0),
                     "coste": float(p.get("cost_amount") or 0), "fecha": p.get("date", ""),
                 })
+    return filas
+
+
+CATEGORIA_CUENTA = {"mutual": "Fondos Indexa", "pension": "Plan de pensiones Indexa"}
+
+
+def rentabilidad_mensual() -> list[dict]:
+    """Índice de rentabilidad ponderada en el tiempo que calcula Indexa (neto de comisiones, con su efectivo):
+    `/accounts/{n}/performance` → return.index, diario ({"20210119": valor, …}). Se guarda el último valor de
+    cada mes; con él, el dashboard da exactamente las rentabilidades mensuales y anuales de la web de Indexa."""
+    filas = []
+    for cta in _get("/users/me").get("accounts", []):
+        idx = ((_get(f"/accounts/{cta.get('account_number')}/performance").get("return") or {}).get("index")) or {}
+        if not idx:
+            continue
+        s = pd.Series({pd.Timestamp(str(k)): float(v) for k, v in idx.items() if v is not None}).sort_index()
+        ult = s.groupby(s.index.to_period("M")).tail(1)
+        cat = CATEGORIA_CUENTA.get(cta.get("type"), cta.get("type") or "Indexa")
+        filas += [{"categoria": cat, "fecha": f.strftime("%Y-%m-%d"), "indice": round(v, 8)} for f, v in ult.items()]
     return filas
 
 

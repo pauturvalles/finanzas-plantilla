@@ -190,6 +190,13 @@ for activo in sorted(set(part["activo"]) - {"EUR"}):
         filas_p.append({"activo": activo, "fecha": mes.strftime("%Y-%m-%d"), "precio": round(precio(activo, mes), 6),
                         "fuente": fuente_precio.get(activo, "")})
 precios_m = pd.DataFrame(filas_p)
+# El mes en curso, con el precio de hoy (patrimonio_detalle): los ficheros de PP suelen acabar antes.
+if not det.empty and len(precios_m):
+    d_hoy = det.assign(valor=a_numero(det["valor"]))
+    d_hoy = d_hoy[(d_hoy["cantidad"] > 0) & (d_hoy["valor"] > 0) & (d_hoy["activo"] != "EUR")].groupby("activo")[["valor", "cantidad"]].sum()
+    p_hoy = (d_hoy["valor"] / d_hoy["cantidad"]).round(6)
+    ult = precios_m["fecha"] == meses[-1].strftime("%Y-%m-%d")
+    precios_m.loc[ult & precios_m["activo"].isin(p_hoy.index), "precio"] = precios_m.loc[ult, "activo"].map(p_hoy)
 valores_m = part[(part["activo"] != "EUR") & part["valor"].notna()].assign(mes=lambda d: d["mes"].dt.strftime("%Y-%m-%d"))
 valores_m = valores_m[["mes", "categoria", "activo", "cantidad", "valor"]].round({"valor": 2})
 print(f"\nSeries de rentabilidad: {precios_m['activo'].nunique() if len(precios_m) else 0} activos con precio, {len(valores_m)} filas de posiciones.")
