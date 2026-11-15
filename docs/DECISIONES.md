@@ -95,6 +95,7 @@ La **nómina** se asigna al mes que paga: si entra entre el día 1 y el 5, cuent
 - **Costes de inversión**: gestión + custodia + TER de `costes.yaml`, en €/año y su efecto acumulado.
 - **Proyección**: patrimonio + aportación mensual a la rentabilidad media de tu reparto, con banda de ±2 puntos y en euros de hoy.
 
+- **Presupuesto anual** (Gastos): el presupuesto mensual × meses transcurridos del año elegido (el mes en curso, por la parte que va; si el año empieza antes que tus datos, desde el primer mes con datos), frente a todo lo gastado en ese periodo en cada categoría. Estado: 🔴 por encima si lo gastado supera el presupuesto a la fecha; 🟠 va a pasarse si lo gastado + tu media mensual por los meses que quedan supera el del año; 🟢 dentro en otro caso. Sin extraordinarios salvo que se activen. Así un gasto que llega de golpe no sale «superado» un mes y a cero los demás.
 - **Comparar rentabilidades** (Inversiones): rentabilidad ponderada en el tiempo, mes a mes. Un activo, por su precio de fin de mes; una plataforma o cartera, como la media de sus activos ponderada por su valor a final del mes anterior. No la mueven tus aportaciones (la TIR de la tabla de rentabilidad sí). Un «*» marca precios aproximados.
 
 ## 13. Tus decisiones

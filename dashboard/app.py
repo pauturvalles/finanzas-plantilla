@@ -36,6 +36,7 @@ if getattr(sys, "_finanzas_firma", None) != _firma:
 from finanzas.fiscal import cuota_ahorro, simular_venta  # noqa: E402
 from finanzas.reglas import normalizar_categorias  # noqa: E402
 from finanzas import rentabilidad as RENT  # noqa: E402
+from finanzas.presupuesto import tabla_anual  # noqa: E402
 
 st.set_page_config(page_title="Finanzas personales", page_icon="💶", layout="wide")
 
@@ -1131,6 +1132,66 @@ with T["gastos"]:
         fig.add_bar(y=cat.index, x=cat[col], name=col, orientation="h", marker_color=color, hovertemplate="%{x:,.0f} €/mes")
     _ = fig.update_layout(barmode="group", bargap=0.25)
     st.plotly_chart(estilo(fig, 60 + 36 * len(cat), euros_en="x"), width="stretch", key="g4")
+
+    # ---------- Presupuesto anual
+    st.subheader("Presupuesto anual", help="Tu presupuesto mensual llevado al año: un gasto que llega de golpe (un seguro anual, ropa en rebajas, "
+                 "una revisión) no sale «superado» un mes y a cero los demás. Presupuesto a la fecha = presupuesto mensual × meses transcurridos "
+                 "del año (el mes en curso, por la parte que va). La proyección suma a lo gastado tu media mensual del periodo por los meses que quedan.")
+    pres_a = _presupuestos()
+    if not len(pres_a):
+        st.info("Aún no hay presupuestos: en la pestaña «Este mes» tienes una propuesta para pegar en la pestaña «presupuestos» de la hoja.")
+    else:
+        c_a = st.columns([1, 2])
+        anios_p = sorted({int(x[:4]) for x in m_all["mes"].dropna()}, reverse=True)
+        anio_p = c_a[0].selectbox("Año", anios_p, index=0, key="pres_anio")
+        con_ext = c_a[1].toggle("Incluir extraordinarios", value=False, key="pres_ext",
+                                help="Por defecto, como en «Este mes», solo el gasto normal. Actívalo para contar también los gastos puntuales.")
+        g_a = m_all[(m_all["flujo"] == "Gasto") & m_all["categoria"].isin(cats_sel)]
+        if not con_ext:
+            g_a = g_a[g_a["tipo_gasto"] != "Extraordinario"]
+        g_a = pd.DataFrame({"mes": g_a["mes"], "categoria": g_a["categoria"], "importe": -g_a["importe_imputado"]})
+        media_a = normal_f.groupby("categoria")["importe_imputado"].sum().mul(-1) / n_meses
+        tab_a, info_a = tabla_anual(g_a, pres_a, anio_p, pd.Timestamp(hoy), m_all["mes"].min(), media_mensual=media_a)
+        en_curso_a = anio_p == hoy.year
+        st.caption(f"{mes_lab(info_a['desde']).capitalize()} – {('hoy' if en_curso_a else mes_lab(info_a['hasta']))}: "
+                   f"{str(round(info_a['meses_transcurridos'], 1)).replace('.', ',')} de {int(info_a['meses_del_anio'])} meses"
+                   + (" (el año empieza en el primer mes con datos)." if info_a["desde"] != f"{anio_p}-01" else "."))
+        k = st.columns(4)
+        k[0].metric("Presupuesto a la fecha", eur(tab_a["Presupuesto a la fecha"].sum()), f"de {eur(tab_a['Presupuesto del año'].sum())} en el año",
+                    delta_color="off", border=True, help="Suma de los presupuestos mensuales × meses transcurridos.")
+        k[1].metric("Gastado", eur(tab_a["Gastado"].sum()), border=True, help="En las categorías con presupuesto, tu parte, en lo que va de año.")
+        margen_a = tab_a["Margen a la fecha"].sum()
+        k[2].metric("Margen a la fecha", eur(margen_a), "por debajo del presupuesto" if margen_a >= 0 else "por encima del presupuesto",
+                    delta_color="normal" if margen_a >= 0 else "inverse", border=True)
+        if en_curso_a:
+            dif_a = tab_a["Proyección a fin de año"].sum() - tab_a["Presupuesto del año"].sum()
+            k[3].metric("Proyección a fin de año", eur(tab_a["Proyección a fin de año"].sum()), f"{eur_delta(dif_a)} vs presupuesto del año",
+                        delta_color="inverse", border=True, help="Lo gastado + tu media mensual de cada categoría por los meses que quedan.")
+        else:
+            k[3].metric("Usado del año", pct(tab_a["Gastado"].sum() / tab_a["Presupuesto del año"].sum() if tab_a["Presupuesto del año"].sum() else 0, 0),
+                        border=True)
+        t_ord = tab_a.sort_values("Presupuesto del año")
+        fig = go.Figure()
+        fig.add_bar(y=t_ord["Categoría"], x=t_ord["Gastado"], name="Gastado", orientation="h", marker_color=C["azul"], hovertemplate="%{x:,.0f} €")
+        if en_curso_a:
+            fig.add_bar(y=t_ord["Categoría"], x=(t_ord["Proyección a fin de año"] - t_ord["Gastado"]).clip(lower=0), name="Proyección (resto del año)",
+                        orientation="h", marker_color="rgba(108,142,191,0.30)", hovertemplate="+%{x:,.0f} €")
+            fig.add_scatter(y=t_ord["Categoría"], x=t_ord["Presupuesto a la fecha"], name="Presupuesto a la fecha", mode="markers",
+                            marker=dict(symbol="line-ns", size=18, line=dict(width=3, color=C["rojo"])), hovertemplate="%{x:,.0f} €")
+        fig.add_scatter(y=t_ord["Categoría"], x=t_ord["Presupuesto del año"], name="Presupuesto del año", mode="markers",
+                        marker=dict(symbol="diamond", size=9, color=C["arena"]), hovertemplate="%{x:,.0f} €")
+        fig.update_layout(barmode="stack", bargap=0.35)
+        st.plotly_chart(estilo(fig, 80 + 34 * len(t_ord), euros_en="x"), width="stretch", key="pres_anual")
+        orden_a = ["Categoría", "Estado", "Usado", "Gastado", "Presupuesto a la fecha", "Margen a la fecha", "Presupuesto del año", "Proyección a fin de año"]
+        st.dataframe(tab_a.sort_values("Usado", ascending=False)[orden_a], hide_index=True, width="stretch", column_config={
+            "Presupuesto del año": st.column_config.NumberColumn("Presupuesto del año (€)", format="localized"),
+            "Presupuesto a la fecha": st.column_config.NumberColumn("A la fecha (€)", format="localized"),
+            "Gastado": st.column_config.NumberColumn("Gastado (€)", format="localized"),
+            "Usado": st.column_config.ProgressColumn("Usado (a la fecha)", format="percent", min_value=0, max_value=1),
+            "Margen a la fecha": st.column_config.NumberColumn("Margen (€)", format="localized", help="Positivo: por debajo de lo presupuestado hasta hoy."),
+            "Proyección a fin de año": st.column_config.NumberColumn("Proyección (€)", format="localized")})
+        if info_a["gastado_sin_presupuesto"] > 1:
+            st.caption(f"Además, {eur(info_a['gastado_sin_presupuesto'])} en categorías sin presupuesto en este periodo.")
 
     # ---------- Año contra año
     st.subheader("Año contra año", help="Los mismos meses de dos años seguidos, para ver si un gasto ha subido de verdad o es impresión. "

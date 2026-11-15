@@ -9,6 +9,7 @@ import io
 import json
 import os
 import re
+import time
 
 import gspread
 import pandas as pd
@@ -51,24 +52,38 @@ def _creds() -> Credentials:
     return Credentials.from_service_account_info(json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]), scopes=SCOPES)
 
 
+def _con_reintentos(f, *args, intentos: int = 5, **kwargs):
+    """Llama a la API de Sheets y, si Google responde 429 (límite de 60 lecturas o escrituras por minuto),
+    espera y lo vuelve a intentar: 20 s, 40 s, 60 s…"""
+    for i in range(intentos):
+        try:
+            return f(*args, **kwargs)
+        except gspread.exceptions.APIError as e:
+            codigo = getattr(getattr(e, "response", None), "status_code", None)
+            if codigo not in (429, 500, 503) or i == intentos - 1:
+                raise
+            time.sleep(20 * (i + 1))
+
+
 class Hoja:
     def __init__(self, sheet_id: str | None = None):
-        self.sh = gspread.authorize(_creds()).open_by_key(sheet_id or os.environ["SHEET_ID"])
+        self.sh = _con_reintentos(gspread.authorize(_creds()).open_by_key, sheet_id or os.environ["SHEET_ID"])
+        # Las pestañas se piden una sola vez: pedir cada una por su nombre gasta una lectura de la cuota cada vez.
+        self._pestanas = {ws.title: ws for ws in _con_reintentos(self.sh.worksheets)}
 
     def _ws(self, nombre: str, cabecera: list[str] | None = None):
-        try:
-            return self.sh.worksheet(nombre)
-        except gspread.WorksheetNotFound:
-            ws = self.sh.add_worksheet(nombre, rows=100, cols=max(10, len(cabecera or [])))
+        if nombre not in self._pestanas:
+            ws = _con_reintentos(self.sh.add_worksheet, nombre, rows=100, cols=max(10, len(cabecera or [])))
             if cabecera:
-                ws.update([cabecera])
-            return ws
+                _con_reintentos(ws.update, [cabecera])
+            self._pestanas[nombre] = ws
+        return self._pestanas[nombre]
 
     def leer(self, nombre: str) -> pd.DataFrame:
         cab = MANUALES.get(nombre)
         # Números sin formato (si no, una hoja en español devuelve "-7,88") y fechas como texto.
-        filas = self._ws(nombre, cab).get_all_values(value_render_option="UNFORMATTED_VALUE",
-                                                     date_time_render_option="FORMATTED_STRING")
+        filas = _con_reintentos(self._ws(nombre, cab).get_all_values, value_render_option="UNFORMATTED_VALUE",
+                                date_time_render_option="FORMATTED_STRING")
         if not filas:
             return pd.DataFrame(columns=cab or [])
         cols = [str(c).strip().lower() for c in filas[0]]
@@ -76,11 +91,13 @@ class Hoja:
         return df.loc[:, [c for c in cols if c]]  # ignora columnas sin cabecera
 
     def escribir(self, nombre: str, df: pd.DataFrame) -> None:
+        """Sustituye la pestaña entera. Dos escrituras: ajustar el tamaño exacto (borra lo que sobre) y volcar todo."""
         ws = self._ws(nombre)
         valores = [list(df.columns)] + df.astype(object).where(df.notna(), "").values.tolist()
-        ws.clear()
-        ws.resize(rows=max(len(valores), 2), cols=max(len(df.columns), 1))
-        ws.update(valores, value_input_option="RAW")
+        _con_reintentos(ws.resize, rows=max(len(valores), 2), cols=max(len(df.columns), 1))
+        if len(valores) == 1:  # sin filas: que no quede la segunda fila con datos viejos
+            valores.append([""] * len(df.columns))
+        _con_reintentos(ws.update, valores, value_input_option="RAW")
 
     def crear_pestanas_manuales(self) -> None:
         for nombre, cab in MANUALES.items():
