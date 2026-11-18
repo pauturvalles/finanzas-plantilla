@@ -148,13 +148,13 @@ def aplicar_desgloses(raw: pd.DataFrame, desgloses: pd.DataFrame) -> tuple[pd.Da
     importe (±0,01 €) y con fecha posterior a la primera línea, se quita y se añaden sus líneas: cada una con
     su fecha (si está vacía, la del pago), concepto e importe. Si el pago aún no ha llegado, no se hace nada.
     Devuelve (raw con las líneas, clasificación de las líneas [tx_id, categoria, subcategoria], avisos)."""
-    from .sheets import a_numero
+    from .sheets import a_fecha, a_numero
     if desgloses is None or desgloses.empty:
         return raw, pd.DataFrame(), []
     d = desgloses.copy()
     d["importe"] = a_numero(d["importe"])
     d["importe_pago"] = a_numero(d["importe_pago"])
-    d["fecha_l"] = pd.to_datetime(d["fecha"].astype(str).str.strip().replace("", None), format="mixed", dayfirst=True, errors="coerce")
+    d["fecha_l"] = a_fecha(d["fecha"])
     raw = raw.copy()
     nuevos, clas, avisos, usados = [], [], [], set()
     for grupo, g in d.groupby("grupo"):

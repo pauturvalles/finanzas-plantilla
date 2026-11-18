@@ -22,7 +22,7 @@ from . import fiscal, patrimonio, reglas, rentabilidad
 from .fuentes import (coverflex, enable_banking, indexa, kraken, myinvestor, revolut_csv, revolutx, sabadell, trade_republic,
                       trade_republic_csv, valores_liquidativos)
 from .modelo import COLUMNAS_MOV, COLUMNAS_RAW, aplicar_desgloses, asignar_ids, posibles_duplicados, resolver_fuentes, upsert, vacio_raw
-from .sheets import Hoja, a_numero, ficheros_de_carpeta
+from .sheets import Hoja, a_fecha, a_numero, ficheros_de_carpeta
 
 RAIZ = Path(__file__).resolve().parents[2]
 CORTE_MES = "2026-10"          # hasta septiembre de 2026 manda el histórico revisado a mano
@@ -213,7 +213,7 @@ def ejecutar(sin_bancos: bool = False) -> None:
     if nuevos_vl:
         n = pd.DataFrame(nuevos_vl)
         vls = pd.concat([vls, n.astype({"vl": object})], ignore_index=True) if not vls.empty else n
-        vls["clave"] = vls["isin"].astype(str) + "|" + pd.to_datetime(vls["fecha"], format="mixed", dayfirst=True, errors="coerce").dt.strftime("%Y-%m-%d").fillna(vls["fecha"].astype(str))
+        vls["clave"] = vls["isin"].astype(str) + "|" + a_fecha(vls["fecha"]).dt.strftime("%Y-%m-%d").fillna(vls["fecha"].astype(str))
         vls = vls.drop_duplicates("clave", keep="last").drop(columns="clave")
         hoja.escribir("valores_liquidativos", vls)
         anotar("Valores liquidativos", "ok", len(nuevos_vl))

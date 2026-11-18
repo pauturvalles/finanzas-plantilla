@@ -179,3 +179,43 @@ def con_indice_oficial(precios: pd.DataFrame, valores: pd.DataFrame, indices: pd
         nuevas = pd.DataFrame({"mes": suma["_mes"].dt.strftime("%Y-%m-%d"), "categoria": cat, "activo": nombre, "valor": suma["valor"], "_mes": suma["_mes"]})
         v = pd.concat([v[~m], nuevas], ignore_index=True)
     return pd.concat([precios, *p_extra], ignore_index=True), v.drop(columns="_mes")
+
+
+def empalmar(precios: pd.DataFrame, valores: pd.DataFrame, traspasos: list[dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Encadena la serie de un fondo con la de la clase a la que se traspasó (p. ej. D → S), para que sea un solo activo.
+
+    Los precios del origen se pasan a la escala del destino (× vl_empalme_destino / vl_empalme_origen, los VL de las dos
+    clases el mismo día) y sus cantidades se dividen por esa razón; así la rentabilidad del mes del traspaso sale del
+    precio del origen al del destino, sin salto. El traspaso en sí no cuenta como rentabilidad ni como aportación.
+    Hasta el mes anterior al del traspaso se usan las filas del origen; desde el mes del traspaso, las del destino.
+    Cada traspaso es un dict con `origen`, `destino`, `fecha_entrada`, `vl_empalme_origen` y `vl_empalme_destino`;
+    sin esos dos últimos no se encadena (la serie del origen se corta y la del destino empieza de cero)."""
+    precios, valores = precios.copy(), valores.copy()
+    for t in traspasos or []:
+        o, d = t["origen"], t["destino"]
+        corte = pd.Timestamp(str(t["fecha_entrada"])).to_period("M").to_timestamp("M")
+        vo, vd = t.get("vl_empalme_origen"), t.get("vl_empalme_destino")
+        k = float(vd) / float(vo) if vo and vd else None
+        if not precios.empty and "activo" in precios.columns:
+            mes_p = _fin_de_mes(precios["fecha"])
+            es_o = precios["activo"] == o
+            conv = precios[es_o & (mes_p < corte)].copy() if k else precios.iloc[0:0].copy()
+            if len(conv):
+                conv["activo"], conv["precio"] = d, pd.to_numeric(conv["precio"], errors="coerce") * k
+            resto = precios[~es_o]
+            propios = resto[resto["activo"] == d]
+            ocupados = set(_fin_de_mes(propios["fecha"]))
+            conv = conv[~_fin_de_mes(conv["fecha"]).isin(ocupados)]
+            precios = pd.concat([resto, conv], ignore_index=True)
+        if not valores.empty and "activo" in valores.columns:
+            mes_v = _fin_de_mes(valores["mes"])
+            es_o = valores["activo"] == o
+            conv = valores[es_o & (mes_v < corte)].copy() if k else valores.iloc[0:0].copy()
+            if len(conv):
+                conv["activo"] = d
+                if "cantidad" in conv.columns:
+                    conv["cantidad"] = pd.to_numeric(conv["cantidad"], errors="coerce") / k
+            resto = valores[~es_o]
+            conv = conv[~_fin_de_mes(conv["mes"]).isin(set(_fin_de_mes(resto.loc[resto["activo"] == d, "mes"])))]
+            valores = pd.concat([resto, conv], ignore_index=True)
+    return precios, valores

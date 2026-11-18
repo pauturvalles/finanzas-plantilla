@@ -29,7 +29,7 @@ if hasattr(sys.stdout, "reconfigure"):
 load_dotenv()
 from finanzas import historico as H  # noqa: E402
 from finanzas.fuentes import trade_republic_csv as TRC  # noqa: E402
-from finanzas.sheets import Hoja, a_numero  # noqa: E402
+from finanzas.sheets import Hoja, a_fecha, a_numero  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("carpeta")
@@ -76,6 +76,7 @@ det = hoja.leer("patrimonio_detalle")
 if not det.empty:
     det["cantidad"] = a_numero(det["cantidad"])
     of = det[det["categoria"].isin(["Fondos Indexa", "Plan de pensiones Indexa", "Fondos MyInvestor", "Cripto"]) & (det["activo"] != "EUR")]
+    of = H.destino_a_origen(of, cfg["inversion"].get("myinvestor_traspasos"))  # D → S: una sola posición hasta hoy
     part = H.extender_hasta_hoy(part, of[["categoria", "activo", "cantidad"]], pp_hasta, meses)
 vls_hoja = hoja.leer("valores_liquidativos")
 if tr:
@@ -95,7 +96,7 @@ if tr:
                 v_, q_ = a_numero(d_["valor"]).sum(), d_["cantidad"].sum()
                 hoy_p = v_ / q_ if q_ else None
             if hoy_p is None and not vls_hoja.empty and (vls_hoja["isin"] == isin).any():  # precio apuntado en la hoja
-                u_ = vls_hoja[vls_hoja["isin"] == isin].assign(f=lambda d: pd.to_datetime(d["fecha"], format="mixed", dayfirst=True)).sort_values("f").iloc[-1]
+                u_ = vls_hoja[vls_hoja["isin"] == isin].assign(f=lambda d: a_fecha(d["fecha"])).sort_values("f").iloc[-1]
                 hoy_p = float(a_numero(pd.Series([u_["vl"]])).iloc[0])
             precios[isin] = H.completar_con_precio_actual(p, hoy_p, pd.Timestamp.today())
             fuente_precio[isin] = "compras interpoladas (aproximado)"
@@ -111,7 +112,7 @@ for activo in sorted(set(part.loc[part["categoria"] == "Cripto", "activo"]) - {"
 
 # --- valores liquidativos guardados en la hoja (fondos): alargan la serie de PP más allá de su última fecha
 if not vls_hoja.empty:
-    v_ = vls_hoja.assign(f=pd.to_datetime(vls_hoja["fecha"], format="mixed", dayfirst=True, errors="coerce"),
+    v_ = vls_hoja.assign(f=a_fecha(vls_hoja["fecha"]),
                          p=a_numero(vls_hoja["vl"])).dropna(subset=["f", "p"])
     for isin, g in v_.groupby("isin"):
         s_ = g.set_index("f")["p"].sort_index()

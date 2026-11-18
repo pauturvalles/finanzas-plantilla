@@ -83,3 +83,21 @@ inversion:
     - nombre_en_extracto: "DEVELOPED WORLD|DEVL WRLD"   # cómo aparece en el CSV de MyInvestor (regex)
       isin: "IE00BD0NCM55"                             # EJEMPLO: iShares Developed World Index
       peso: 1.0                                        # fracción de cada aportación que va a este fondo
+  # --- Si traspasas un fondo a otra clase o a otro fondo de MyInvestor (opcional; ejemplo comentado) ---
+  # Pon en cada fondo `desde` / `hasta` (inclusive) para que cada compra vaya a la clase que tocaba ese día, porque las dos
+  # suelen compartir nombre en el extracto. Y declara el traspaso con los datos de las dos órdenes (reembolso y suscripción):
+  # no es compra ni venta; el destino hereda participaciones y coste fiscal del origen, y lo invertido arranca en `importe`.
+  # myinvestor_traspasos:
+  #   - origen: "IE00BD0NCM55"          # clase D
+  #     destino: "IE000ZYRH0Q7"         # clase S
+  #     fecha_salida: "2026-11-12"      # fecha VALOR del reembolso (la de la operación, no la de la orden)
+  #     fecha_entrada: "2026-11-17"     # fecha valor de la suscripción
+  #     participaciones_origen: 100.0
+  #     participaciones_destino: 250.0
+  #     importe: 3000.00
+  #     vl_origen: 30.00                # valor liquidativo de cada lado ese día (viene en la orden)
+  #     vl_destino: 12.00
+  #     vl_empalme_origen: 30.00        # VL de las dos clases el MISMO día, para encadenar sus series de precios
+  #     vl_empalme_destino: 12.50
+  # myinvestor_compras_confirmadas:     # compras ya hechas, con sus participaciones reales y lo realmente invertido (MyInvestor no invierte el resto de los decimales)
+  #   - {isin: "IE000ZYRH0Q7", fecha: "2026-11-11", importe: 425, participaciones: 33.83}

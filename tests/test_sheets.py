@@ -48,3 +48,10 @@ def test_escribir_usa_dos_escrituras_y_pestanas_en_cache():
     h._pestanas = {"saldos": ws}
     h.escribir("saldos", pd.DataFrame({"a": [1, None]}))
     assert ws.ops == [("resize", 3, 1), ("update", [["a"], [1.0], [""]])]
+
+
+def test_a_fecha_no_da_la_vuelta_a_las_fechas_iso():
+    from finanzas.sheets import a_fecha
+    r = a_fecha(pd.Series(["2026-11-12", "2026-11-17", "12/11/2026", "01/12/2026", "2026-11-05 00:00:00", "", "nan"]))
+    assert list(r.dropna().dt.strftime("%Y-%m-%d")) == ["2026-11-12", "2026-11-17", "2026-11-12", "2026-12-01", "2026-11-05"]
+    assert r.isna().tolist() == [False, False, False, False, False, True, True]

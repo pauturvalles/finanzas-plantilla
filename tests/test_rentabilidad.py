@@ -91,3 +91,47 @@ def test_indice_oficial_sustituye_a_los_fondos_de_su_categoria():
     assert r.loc["2026-02-28", "F1"] == pytest.approx(0.10)  # el fondo suelto sigue disponible
     total = R.rent_grupo(v2, r)
     assert total.loc["2026-03-31"] == pytest.approx((1100 * 0.02 + 1010 * 0.01) / 2110)
+
+
+# ------------------------------------------------------------------ traspaso entre clases (D → S)
+def _traspaso():
+    # La D vale 30 y la S 12 el mismo día (razón 0,4); el traspaso es en noviembre.
+    return [{"origen": "D", "destino": "S", "fecha_entrada": "2026-11-17", "vl_empalme_origen": 30.0, "vl_empalme_destino": 12.0}]
+
+
+def test_empalmar_encadena_la_clase_de_origen_con_la_de_destino():
+    # D: 30 (sep), 33 (oct, +10 %). S entra en noviembre y cierra a 13,2 (+0 % respecto a 33 × 0,4 = 13,2).
+    precios = pd.DataFrame({"activo": ["D", "D", "S"], "fecha": ["2026-09-30", "2026-10-31", "2026-11-30"], "precio": [30.0, 33.0, 14.52]})
+    valores = pd.DataFrame({"mes": ["2026-09-30", "2026-10-31", "2026-11-30"], "categoria": "Fondos MyInvestor", "activo": ["D", "D", "S"],
+                            "cantidad": [100.0, 100.0, 250.0], "valor": [3000.0, 3300.0, 3630.0]})
+    p, v = R.empalmar(precios, valores, _traspaso())
+    assert set(p["activo"]) == {"S"} and set(v["activo"]) == {"S"}
+    r = R.rent_activos(p)["S"]
+    assert r["2026-10-31"] == pytest.approx(0.10)      # el último mes de la D, ya como S
+    assert r["2026-11-30"] == pytest.approx(0.10)      # 13,2 → 14,52: el traspaso no mete saltos
+    g = R.rent_grupo(v, R.rent_activos(p))
+    assert g["2026-11-30"] == pytest.approx(0.10)      # la cartera pondera con lo que valía la D a fin de octubre
+    assert v.set_index("mes").loc["2026-10-31", "cantidad"] == pytest.approx(250.0)  # 100 D = 250 S
+
+
+def test_empalmar_sin_razon_corta_la_serie_del_origen():
+    precios = pd.DataFrame({"activo": ["D", "S"], "fecha": ["2026-10-31", "2026-11-30"], "precio": [33.0, 14.0]})
+    valores = pd.DataFrame({"mes": ["2026-10-31", "2026-11-30"], "categoria": "x", "activo": ["D", "S"], "valor": [3300.0, 3500.0]})
+    t = [{"origen": "D", "destino": "S", "fecha_entrada": "2026-11-17"}]
+    p, v = R.empalmar(precios, valores, t)
+    assert list(p["activo"]) == ["S"] and list(v["activo"]) == ["S"]
+
+
+def test_empalmar_gana_la_foto_propia_del_destino_en_el_mismo_mes():
+    # Una reconstrucción puede dejar filas de la D en el mes del traspaso: no se suman a las de la S.
+    precios = pd.DataFrame({"activo": ["D", "D", "S"], "fecha": ["2026-10-31", "2026-11-30", "2026-11-30"], "precio": [33.0, 34.0, 14.52]})
+    valores = pd.DataFrame({"mes": ["2026-10-31", "2026-11-30", "2026-11-30"], "categoria": "x", "activo": ["D", "D", "S"], "valor": [3300.0, 3400.0, 3630.0]})
+    p, v = R.empalmar(precios, valores, _traspaso())
+    assert len(p) == 2 and len(v) == 2
+    assert v[v["mes"] == "2026-11-30"]["valor"].iloc[0] == pytest.approx(3630.0)
+
+
+def test_empalmar_sin_traspasos_no_toca_nada():
+    precios, valores = _precios(), pd.DataFrame({"mes": ["2026-01-31"], "categoria": "x", "activo": ["A"], "valor": [1.0]})
+    p, v = R.empalmar(precios, valores, [])
+    assert p.equals(precios) and v.equals(valores)

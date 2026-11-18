@@ -145,6 +145,21 @@ def extender_hasta_hoy(part: pd.DataFrame, oficiales: pd.DataFrame, pp_hasta: pd
     return pd.concat([part[part["mes"] <= pp_hasta], pd.DataFrame(filas)], ignore_index=True)
 
 
+def destino_a_origen(oficiales: pd.DataFrame, traspasos: list[dict]) -> pd.DataFrame:
+    """Para reconstruir el histórico: la posición de hoy del fondo de destino de un traspaso (D → S) se expresa como la
+    del origen (cantidad × vl_empalme_origen / vl_empalme_destino). Así la interpolación desde la última fecha de PP no
+    inventa una salida y una entrada a mitad de camino; el panel encadena después las dos clases (`rentabilidad.empalmar`)."""
+    o = oficiales.copy()
+    for t in traspasos or []:
+        vo, vd = t.get("vl_empalme_origen"), t.get("vl_empalme_destino")
+        if not (vo and vd):
+            continue
+        m = o["activo"] == t["destino"]
+        o.loc[m, "cantidad"] = pd.to_numeric(o.loc[m, "cantidad"], errors="coerce") * float(vo) / float(vd)
+        o.loc[m, "activo"] = t["origen"]
+    return o
+
+
 # ------------------------------------------------------------------ saldos
 def saldos_revolut(contenido: bytes, pct: float) -> pd.Series:
     """Saldo diario (todas las subcuentas sumadas) de un CSV de Revolut, multiplicado por `pct`."""

@@ -45,3 +45,11 @@ def test_interpola_hasta_hoy():
 def test_plan_de_pensiones_con_alias_es_fondo():
     assert H.categoria_pp("Indexa", "0P0000TEST.F", {"0P0000TEST.F": "N0001"}) == "Plan de pensiones Indexa"
     assert H.categoria_pp("Binance", "BTC", {}) == "Cripto"
+
+
+def test_destino_a_origen_expresa_la_clase_nueva_como_la_antigua():
+    of = pd.DataFrame({"categoria": ["Fondos MyInvestor", "Fondos MyInvestor"], "activo": ["S", "OTRO"], "cantidad": [250.0, 7.0]})
+    t = [{"origen": "D", "destino": "S", "vl_empalme_origen": 30.0, "vl_empalme_destino": 12.0}]
+    r = H.destino_a_origen(of, t).set_index("activo")["cantidad"]
+    assert r["D"] == 250.0 * 30.0 / 12.0 and r["OTRO"] == 7.0 and "S" not in r.index
+    assert H.destino_a_origen(of, []).equals(of)

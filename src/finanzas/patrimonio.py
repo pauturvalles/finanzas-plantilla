@@ -18,11 +18,11 @@ import re
 
 import pandas as pd
 
-from .sheets import a_numero
+from .sheets import a_fecha, a_numero
 
 
 def _fecha(s: pd.Series) -> pd.Series:
-    return pd.to_datetime(s, format="mixed", dayfirst=True, errors="coerce")
+    return a_fecha(s)
 
 
 def _vl(vls: pd.DataFrame, isin: str, fecha: pd.Timestamp) -> float | None:
@@ -31,9 +31,43 @@ def _vl(vls: pd.DataFrame, isin: str, fecha: pd.Timestamp) -> float | None:
     return float(v.sort_values("fecha")["vl"].iloc[-1]) if len(v) else None
 
 
+def _ts(x) -> pd.Timestamp | None:
+    """Fecha de la configuración (YAML la lee como date o como texto) → Timestamp, o None si falta."""
+    return pd.Timestamp(str(x)) if x not in (None, "") else None
+
+
+def _en_ventana(fecha: pd.Timestamp, f: dict) -> bool:
+    """¿Cuenta una compra de esa fecha para el fondo? `desde` y `hasta` (ambos opcionales, inclusive) separan
+    clases del mismo fondo que comparten nombre en el extracto (D hasta el traspaso, S desde entonces)."""
+    d, h = _ts(f.get("desde")), _ts(f.get("hasta"))
+    return (d is None or fecha >= d) and (h is None or fecha <= h)
+
+
+def vl_conocidos(cfg_inv: dict) -> pd.DataFrame:
+    """Valores liquidativos de las operaciones de traspaso (los de la pantalla de órdenes de MyInvestor): sirven de
+    suelo si la descarga pública falla y para valorar un fondo nuevo desde el día de su entrada."""
+    filas = []
+    for t in cfg_inv.get("myinvestor_traspasos") or []:
+        for isin, fecha, vl in ((t["origen"], t["fecha_salida"], t.get("vl_origen")), (t["destino"], t["fecha_entrada"], t.get("vl_destino"))):
+            if vl:
+                filas.append({"isin": isin, "fecha": str(fecha), "vl": float(vl), "fuente": "orden de traspaso"})
+    return pd.DataFrame(filas, columns=["isin", "fecha", "vl", "fuente"])
+
+
 def myinvestor(mov: pd.DataFrame, cfg_inv: dict, iniciales: pd.DataFrame,
                conciliaciones: pd.DataFrame, vls: pd.DataFrame) -> pd.DataFrame:
+    """Posición de cada fondo de MyInvestor. Además de la foto inicial y las compras:
+    - `desde`/`hasta` de cada fondo: ventana de fechas de sus compras (una clase y otra con el mismo nombre).
+    - `myinvestor_compras_confirmadas`: compras con sus participaciones reales (pantalla de órdenes); mandan sobre las
+      estimadas hasta su última fecha.
+    - `myinvestor_traspasos`: un traspaso entre fondos (p. ej. clase D → S) mueve las participaciones y el coste fiscal del
+      origen al destino; no es una compra ni una venta. Lo «invertido» en la plataforma del destino arranca en el valor con
+      que llega el traspaso (`importe`), que es como lo cuenta la web de MyInvestor."""
     fondos = cfg_inv["myinvestor_fondos"]
+    por_isin = {f["isin"]: f for f in fondos}
+    traspasos = cfg_inv.get("myinvestor_traspasos") or []
+    confirmadas = cfg_inv.get("myinvestor_compras_confirmadas") or []
+    vls = pd.concat([vls, vl_conocidos(cfg_inv)], ignore_index=True) if len(traspasos) else vls
     vls = vls.assign(fecha=_fecha(vls["fecha"]), vl=a_numero(vls["vl"])).dropna(subset=["fecha", "vl"])
     if iniciales.empty or "isin" not in iniciales.columns:
         iniciales = pd.DataFrame(columns=["isin", "fecha", "participaciones", "invertido"])
@@ -60,57 +94,112 @@ def myinvestor(mov: pd.DataFrame, cfg_inv: dict, iniciales: pd.DataFrame,
     transf = m[(m["cuenta"] != "MYINV") & (m["importe"] < 0) & iban.__ne__("")
                & m.get("iban_contraparte", pd.Series("", index=m.index)).fillna("").str.replace(" ", "").eq(iban)] if iban else m.iloc[0:0]
     fraccion, dias = float(cfg_inv.get("myinvestor_fraccion_invertida", 1.0)), int(cfg_inv.get("myinvestor_dias_ejecucion", 2))
+    sin_fecha = pd.Timestamp("1900-01-01")
 
-    filas = []
-    for f in fondos:
-        isin, clave, peso = f["isin"], f["nombre_en_extracto"].upper(), float(f.get("peso", 0))
+    def estado(isin: str, corte: pd.Timestamp | None = None, con_salidas: bool = True, _pila: tuple = ()) -> dict:
+        """Posición de un fondo a una fecha (`corte`; sin ella, hoy). Sin salidas: la que había justo antes de salir
+        en un traspaso, que es lo que se lleva el destino."""
+        f = por_isin[isin]
+        clave, peso = f["nombre_en_extracto"].upper(), float(f.get("peso", 0))
         i = ini[ini["isin"] == isin]
+        entra_por_traspaso = any(t["destino"] == isin for t in traspasos)
+        notas, origen = [], "foto inicial"
         if i.empty:
-            vistos = ", ".join(sorted(set(ini["isin"]))) or "ninguno"
-            filas.append({"plataforma": "MyInvestor", "producto": clave, "referencia": isin, "valor": None,
-                          "aportado": None, "metodo": f"falta la foto inicial (ISIN en fondos_inicial: {vistos})"})
-            continue
-        base_f, base_p = i["fecha"].iloc[0], float(i["participaciones"].iloc[0])
-        invertido = float(i["invertido"].iloc[0]) if pd.notna(i["invertido"].iloc[0]) else 0.0
-        origen = "foto inicial"
-        # La conciliación más reciente sustituye al punto de partida.
-        c = con[(con["isin"] == isin) & con["fecha"].notna()] if len(con) else con
-        if len(c) and c["fecha"].max() > base_f:
-            u = c.sort_values("fecha").iloc[-1]
-            if pd.notna(u["participaciones"]):
-                base_f, base_p, origen = u["fecha"], float(u["participaciones"]), "conciliación"
-            elif pd.notna(u["valor_real"]) and _vl(vls, isin, u["fecha"]):
-                base_f, base_p, origen = u["fecha"], float(u["valor_real"]) / _vl(vls, isin, u["fecha"]), "conciliación"
+            if not entra_por_traspaso:
+                vistos = ", ".join(sorted(set(ini["isin"]))) or "ninguno"
+                return {"falta_foto": f"falta la foto inicial (ISIN en fondos_inicial: {vistos})", "clave": clave}
+            base_f = foto_f = sin_fecha
+            base_p, invertido, cf0, origen = 0.0, 0.0, 0.0, "cero (entra por traspaso)"
+        else:
+            foto_f = base_f = i["fecha"].iloc[0]
+            base_p = float(i["participaciones"].iloc[0])
+            invertido = float(i["invertido"].iloc[0]) if pd.notna(i["invertido"].iloc[0]) else 0.0
+            cf0 = i["coste_fiscal"].iloc[0]
+            # La conciliación más reciente sustituye al punto de partida.
+            c = con[(con["isin"] == isin) & con["fecha"].notna()] if len(con) else con
+            if len(c) and c["fecha"].max() > base_f:
+                u = c.sort_values("fecha").iloc[-1]
+                if pd.notna(u["participaciones"]):
+                    base_f, base_p, origen = u["fecha"], float(u["participaciones"]), "conciliación"
+                elif pd.notna(u["valor_real"]) and _vl(vls, isin, u["fecha"]):
+                    base_f, base_p, origen = u["fecha"], float(u["valor_real"]) / _vl(vls, isin, u["fecha"]), "conciliación"
 
-        # Compras: reales si existen; si no, deducidas de las transferencias.
+        # Compras (importe, participaciones o None si hay que calcularlas con el VL): reales si existen; si no, deducidas.
         reales = subs_reales[subs_reales["concepto"].str.upper().str.contains(clave, regex=True)]
         if len(reales):
-            compras = [(r["fecha"], -r["importe"]) for _, r in reales.iterrows()]
+            compras = [(r["fecha"], -r["importe"], None) for _, r in reales.iterrows()]
             tipo = "compras reales"
         else:
-            compras = [(r["fecha"] + pd.Timedelta(days=dias), -r["importe"] * fraccion * peso) for _, r in transf.iterrows()]
+            compras = [(r["fecha"] + pd.Timedelta(days=dias), -r["importe"] * fraccion * peso, None) for _, r in transf.iterrows()]
             tipo = "compras deducidas"
+        compras = [c_ for c_ in compras if _en_ventana(c_[0], f)]
+        conf = [(pd.Timestamp(str(c_["fecha"])), float(c_["importe"]), float(c_["participaciones"])) for c_ in confirmadas if c_["isin"] == isin]
+        if conf:  # lo confirmado manda sobre lo estimado hasta su última fecha
+            ultima = max(c_[0] for c_ in conf)
+            compras = [c_ for c_ in compras if c_[0] > ultima] + conf
+            tipo += " + órdenes confirmadas"
+        compras = [c_ for c_ in compras if corte is None or c_[0] <= corte]
+
         part, sin_vl = base_p, 0
-        for fecha, importe in compras:
+        for fecha, importe, p_conf in compras:
             if fecha <= base_f:
+                continue
+            if p_conf is not None:
+                part += p_conf
                 continue
             v = _vl(vls, isin, fecha)
             if v:
                 part += importe / v
             else:
                 sin_vl += 1
-        aportado = invertido + sum(imp for fe, imp in compras if fe > i["fecha"].iloc[0])
-        cf0 = i["coste_fiscal"].iloc[0]
-        coste_fiscal = cf0 + sum(imp for fe, imp in compras if fe > i["fecha"].iloc[0]) if pd.notna(cf0) else None
+        nuevas = [(fe, imp) for fe, imp, _ in compras if fe > foto_f]
+        inv = invertido + sum(imp for _, imp in nuevas)
+        cf = cf0 + sum(imp for _, imp in nuevas) if pd.notna(cf0) else float("nan")
+
+        # Traspasos: lo que entra se lleva participaciones, lo invertido y el coste fiscal del origen; lo que sale, lo resta.
+        for t in traspasos:
+            fe_sal, fe_ent = _ts(t["fecha_salida"]), _ts(t["fecha_entrada"])
+            if t["destino"] == isin and t["origen"] not in _pila and (corte is None or fe_ent <= corte):
+                o = estado(t["origen"], corte=fe_sal, con_salidas=False, _pila=_pila + (isin,))
+                frac = min(1.0, float(t["participaciones_origen"]) / o["part"]) if o.get("part", 0) > 0 else 1.0
+                part += float(t["participaciones_destino"])
+                inv += float(t.get("importe", o.get("inv", 0.0) * frac))  # la plataforma cuenta lo invertido desde el valor con que llega
+                cf = cf + o["cf"] * frac if pd.notna(cf) and pd.notna(o.get("cf", float("nan"))) else float("nan")
+                notas.append(f"traspaso de {t['origen']} el {fe_ent:%d/%m/%Y} ({float(t['participaciones_destino']):.2f} part.)")
+            if t["origen"] == isin and con_salidas and (corte is None or fe_sal <= corte):
+                o = estado(isin, corte=fe_sal, con_salidas=False, _pila=_pila + (isin,))
+                frac = min(1.0, float(t["participaciones_origen"]) / o["part"]) if o.get("part", 0) > 0 else 1.0
+                part -= float(t["participaciones_origen"])
+                inv -= o.get("inv", 0.0) * frac
+                cf = cf - o["cf"] * frac if pd.notna(cf) and pd.notna(o.get("cf", float("nan"))) else float("nan")
+                notas.append(f"traspaso a {t['destino']} el {fe_sal:%d/%m/%Y} ({float(t['participaciones_origen']):.2f} part.)")
+        return {"part": part, "inv": inv, "cf": cf, "base_f": base_f, "origen": origen, "tipo": tipo, "sin_vl": sin_vl,
+                "notas": notas, "clave": clave}
+
+    filas = []
+    for f in fondos:
+        isin = f["isin"]
+        e = estado(isin)
+        if "falta_foto" in e:
+            filas.append({"plataforma": "MyInvestor", "producto": e["clave"], "referencia": isin, "valor": None,
+                          "aportado": None, "metodo": e["falta_foto"]})
+            continue
+        part = e["part"]
+        salio = any(t["origen"] == isin for t in traspasos)
+        if salio and abs(part) < 0.05:
+            continue  # traspasado entero: la posición vive ahora en el fondo de destino
         hoy = _vl(vls, isin, pd.Timestamp.today().normalize() + pd.Timedelta(days=1))
         v_ = vls[(vls["isin"] == isin)]
         fecha_vl = v_["fecha"].max().strftime("%Y-%m-%d") if len(v_) else ""
-        filas.append({"plataforma": "MyInvestor", "producto": clave, "referencia": isin, "activo": isin, "cantidad": round(part, 6),
-                      "valor": round(part * hoy, 2) if hoy else None, "aportado": round(aportado, 2),
-                      "coste_fiscal": round(coste_fiscal, 2) if coste_fiscal is not None else None,
-                      "valor_fondos": round(part * hoy, 2) if hoy else None, "fecha_valor": fecha_vl,
-                      "metodo": f"estimado desde {origen} {base_f:%d/%m/%Y}, {tipo}, {part:.4f} part."
-                                + (f" ({sin_vl} compras sin VL)" if sin_vl else "")})
+        desde = "" if e["base_f"] == sin_fecha else f" {e['base_f']:%d/%m/%Y}"
+        metodo = f"estimado desde {e['origen']}{desde}, {e['tipo']}, {part:.4f} part." \
+            + "".join(f", {n}" for n in e["notas"]) \
+            + (f" ({e['sin_vl']} compras sin VL)" if e["sin_vl"] else "") \
+            + (f" — queda un residuo de {part:.2f} part. tras el traspaso: revisa la foto inicial" if salio and part > 0.05 else "")
+        filas.append({"plataforma": "MyInvestor", "producto": e["clave"], "referencia": isin, "activo": isin, "cantidad": round(part, 6),
+                      "valor": round(part * hoy, 2) if hoy else None, "aportado": round(e["inv"], 2),
+                      "coste_fiscal": round(e["cf"], 2) if pd.notna(e["cf"]) else None,
+                      "valor_fondos": round(part * hoy, 2) if hoy else None, "fecha_valor": fecha_vl, "metodo": metodo})
     return pd.DataFrame(filas)
 
 

@@ -64,6 +64,8 @@ Los ficheros pueden solaparse: nada se duplica. La pestaña «Calidad del dato»
 
 **Al cambiar algo grande** (traspaso, venta): actualizar `costes_fiscales` con los datos de la web de la entidad.
 
+**Al traspasar un fondo de MyInvestor a otra clase** (p. ej. D → S): no hace falta tocar la hoja. En `config/cuentas.yaml`: añade el fondo nuevo a `myinvestor_fondos`, pon `hasta` en el antiguo y `desde` en el nuevo, y declara el traspaso en `myinvestor_traspasos` con los datos de los correos de MyInvestor (fecha valor, participaciones y valor liquidativo de cada lado). Si ya compraste algo en la clase nueva, anótalo en `myinvestor_compras_confirmadas`. Después, `python scripts/probar_vl.py` (debe sacar el valor liquidativo de las dos clases), ejecuta el pipeline y comprueba que el patrimonio total no salta; recarga el dashboard (Reboot en Streamlit Cloud). Si el valor del fondo nuevo no se descarga, apunta su VL en `valores_liquidativos`. El coste fiscal del fondo nuevo sale de la foto inicial más las compras (cuadra con la ficha de la web al céntimo); no hace falta apuntarlo en `costes_fiscales`. Compara con la ficha del fondo en la web de MyInvestor: participaciones, «Invertido» y «Rentabilidad fiscal → Invertido».
+
 **Cada 3–6 meses:** revisar comisiones, TER y remuneraciones en `config/costes.yaml` (cambian; p. ej. el interés de Trade Republic sigue al BCE) y actualizar su fecha `revisado`.
 
 ## 4. Pestañas que se rellenan a mano en la hoja

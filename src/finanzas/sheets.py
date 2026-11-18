@@ -48,6 +48,17 @@ def a_numero(serie: pd.Series) -> pd.Series:
     return serie.map(conv)
 
 
+def a_fecha(serie: pd.Series) -> pd.Series:
+    """Fechas de la hoja → Timestamp. Las ISO (AAAA-MM-DD, lo que escribe el pipeline) se leen tal cual y el resto con el día
+    primero (dd/mm/aaaa, lo que escribe a mano una hoja en español). Hace falta separarlas: pandas 3 con `dayfirst=True` da la
+    vuelta al mes y al día de una fecha ISO cuando el día es 12 o menos («2026-11-12» → 12 de diciembre)."""
+    s = pd.Series(serie).astype(str).str.strip()
+    iso = s.str.match(r"^\d{4}-\d{2}-\d{2}")
+    a = pd.to_datetime(s.where(iso).str[:10], format="%Y-%m-%d", errors="coerce")
+    b = pd.to_datetime(s.where(~iso), format="mixed", dayfirst=True, errors="coerce")
+    return a.fillna(b)
+
+
 def _creds() -> Credentials:
     return Credentials.from_service_account_info(json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]), scopes=SCOPES)
 

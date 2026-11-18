@@ -507,6 +507,17 @@ def rentabilidad_por_activo(det: pd.DataFrame, pp: pd.DataFrame, rx: pd.DataFram
     cfg_ = _cuentas_cfg()
     alias = cfg_.get("inversion", {}).get("alias_activos") or {}
     fondos_mi = cfg_.get("inversion", {}).get("myinvestor_fondos", [])
+    traspasos_mi = cfg_.get("inversion", {}).get("myinvestor_traspasos") or []
+
+    def _linaje(isin: str) -> list[str]:
+        """El fondo y los que le traspasaron su posición (D → S): su TIR cuenta también lo aportado al origen."""
+        out, pend = [isin], [isin]
+        while pend:
+            x = pend.pop()
+            for t_ in traspasos_mi:
+                if t_["destino"] == x and t_["origen"] not in out:
+                    out.append(t_["origen"]); pend.append(t_["origen"])
+        return out
     pp = pp.copy()
     if not pp.empty:
         pp["activo"] = pp["activo"].replace(alias)
@@ -525,7 +536,7 @@ def rentabilidad_por_activo(det: pd.DataFrame, pp: pd.DataFrame, rx: pd.DataFram
             t_ = trv[(trv["isin"] == a) & trv["tipo"].isin(["BUY", "SELL"])]
             f_ = list(zip(pd.to_datetime(t_["fecha"]), np.where(num(t_["cantidad"]) > 0, -num(t_["importe"]), num(t_["importe"]))))
         elif not pp.empty:
-            g = pp[pp["activo"] == a]
+            g = pp[pp["activo"].isin(_linaje(a))]
             if cat == "Cripto":
                 g = g[g["tipo"].isin(["compra", "venta"])]
                 sig = g["tipo"].map({"compra": -1, "venta": 1})
@@ -538,10 +549,17 @@ def rentabilidad_por_activo(det: pd.DataFrame, pp: pd.DataFrame, rx: pd.DataFram
                 o_ = o_[(o_["fecha"] > ult_pp) & o_["importe"].notna()]
                 f_ += list(zip(o_["fecha"], np.where(o_["tipo"] == "compra", -o_["importe"], o_["importe"])))
             if cat == "Fondos MyInvestor":
-                patron = next((f["nombre_en_extracto"] for f in fondos_mi if f["isin"] == a), None)
-                if patron:
-                    sub = m_all[(m_all["cuenta"] == "MYINV") & (m_all["flujo"] == "Ahorro / inversión") & (pd.to_datetime(m_all["fecha"]) > ult_pp)
-                                & m_all["concepto"].str.upper().str.contains(patron, regex=True, na=False)]
+                for isin_l in _linaje(a):  # cada clase, con las compras de su ventana de fechas (desde/hasta)
+                    f_l = next((f for f in fondos_mi if f["isin"] == isin_l), None)
+                    if not f_l:
+                        continue
+                    fe_ = pd.to_datetime(m_all["fecha"])
+                    sub = m_all[(m_all["cuenta"] == "MYINV") & (m_all["flujo"] == "Ahorro / inversión") & (fe_ > ult_pp)
+                                & m_all["concepto"].str.upper().str.contains(f_l["nombre_en_extracto"], regex=True, na=False)]
+                    if f_l.get("desde"):
+                        sub = sub[pd.to_datetime(sub["fecha"]) >= pd.Timestamp(str(f_l["desde"]))]
+                    if f_l.get("hasta"):
+                        sub = sub[pd.to_datetime(sub["fecha"]) <= pd.Timestamp(str(f_l["hasta"]))]
                     f_ += list(zip(pd.to_datetime(sub["fecha"]), sub["importe"]))
         filas.append({"Inversión": r["nombre"] or a, "Categoría": cat, "Valor actual": r["valor"], "Valor de compra": r["compra"],
                       "Aportación real": r["coste"], "TIR anual": xirr(f_ + [(hoy, r["valor"])]) if f_ else np.nan})
@@ -1743,7 +1761,9 @@ with T["inversiones"]:
         else:
             ph["precio"], va["valor"] = num(ph["precio"]), num(va["valor"])
             oficial = pestana("indexa_rentabilidad")
-            ph, va = RENT.con_indice_oficial(ph, va, oficial)  # Indexa: su propia rentabilidad (neta de comisiones), como en su web
+            # Traspaso de una clase de fondo a otra (D → S): una sola serie, sin que el traspaso cuente como rentabilidad.
+            ph, va = RENT.empalmar(ph, va, (_cuentas_cfg().get("inversion", {}) or {}).get("myinvestor_traspasos") or [])
+            ph, va = RENT.con_indice_oficial(ph, va, oficial)  # Indexa: su propia rentabilidad (neta de comisiones), como en su web  # Indexa: su propia rentabilidad (neta de comisiones), como en su web
             r_act = RENT.rent_activos(ph)
             det_n = pestana("patrimonio_detalle")
             nombres_a = dict(zip(det_n["activo"], det_n["nombre"])) if not det_n.empty and "nombre" in det_n.columns else {}
